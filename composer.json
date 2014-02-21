@@ -1,0 +1,28 @@
+{
+    "name": "gigablah/durian",
+    "version": "0.0.1",
+    "type": "library",
+    "description": "A pungent PHP 5.5 microframework.",
+    "keywords": ["framework", "micro", "microframework"],
+    "homepage": "http://gigablah.com",
+    "license" : "MIT",
+    "authors" : [
+        {
+            "name": "Chris Heng",
+            "email": "bigblah@gmail.com",
+            "homepage": "http://gigablah.com"
+        }
+    ],
+    "require": {
+        "php": ">=5.5.0",
+        "pimple/pimple": "~1.0",
+        "symfony/http-foundation": ">=2.3,<2.5-dev",
+        "symfony/http-kernel": ">=2.3,<2.5-dev",
+        "nikic/fast-route": "dev-master"
+    },
+    "autoload": {
+        "psr-0": {
+            "Durian": "src/"
+        }
+    }
+}
