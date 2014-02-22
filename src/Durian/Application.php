@@ -2,6 +2,8 @@
 
 namespace Durian;
 
+use Durian\Middleware\AbstractMiddleware;
+use Durian\Middleware\RouterMiddleware;
 use Symfony\Component\HttpKernel\HttpKernelInterface;
 use Symfony\Component\HttpFoundation\Request;
 
@@ -21,6 +23,9 @@ class Application extends \Pimple implements HttpKernelInterface
         parent::__construct();
 
         $this['context'] = new Context();
+        $this['routes'] = array();
+
+        $this->handlers = array(new RouterMiddleware());
 
         foreach ($values as $key => $value) {
             $this[$key] = $value;
@@ -29,23 +34,45 @@ class Application extends \Pimple implements HttpKernelInterface
 
     public function handler($handler, $test = null)
     {
-        $this->handlers[] = array($handler, $test);
+        if (!is_callable($handler) && isset($this[$handler])) {
+            $handler = $this->raw($handler);
+        }
+
+        return $handler instanceof Handler ? $handler : new Handler($handler, $test);
+    }
+
+    public function before($handler, $test = null)
+    {
+        array_unshift($this->handlers, $this->handler($handler, $test));
+    }
+
+    public function after($handler, $test = null)
+    {
+        array_push($this->handlers, $this->handler($handler, $test));
+    }
+
+    public function handlers(array $handlers, $replace = true)
+    {
+        if ($replace) {
+            $this->handlers = array();
+        }
+
+        foreach ($handlers as $handler) {
+            $this->handlers[] = $this->handler($handler);
+        }
     }
 
     public function route($path, callable $handlers = null)
     {
         if (null === $handlers) {
-            $handlers = array(function () {
-                yield;
-            });
+            $handlers = array(function () {});
         } else {
             $handlers = func_get_args();
             array_shift($handlers);
         }
 
         $route = Route::create($path, $handlers);
-
-        $this->handler(new Dispatcher($route, $this['context']));
+        $this['routes'] = array_merge($this['routes'], array($path => $route));
 
         return $route;
     }
@@ -77,19 +104,24 @@ class Application extends \Pimple implements HttpKernelInterface
         $this['context']->pushRequest($request);
 
         try {
-            foreach ($this->handlers as list($handler, $test)) {
-                if ($handler instanceof \Closure) {
-                    $handler = $handler->bindTo($this['context']);
-                }
-                if ($test instanceof \Closure) {
-                    $test = $test->bindTo($this['context']);
-                }
-                if (null === $test || call_user_func($test)) {
-                    $result = call_user_func($handler);
-                    if ($result instanceof \Generator) {
-                        array_push($generators, $result);
-                        $result = $result->current();
+            while ($handler = array_shift($this->handlers)) {
+                $handler->bind($this);
+
+                $result = call_user_func($handler);
+
+                if ($result instanceof \Generator) {
+                    $handlers = array();
+                    $generator = $result;
+                    array_push($generators, $generator);
+
+                    while ($generator->current() instanceof Handler) {
+                        array_push($handlers, $generator->current());
+                        $generator->next();
                     }
+
+                    $this->handlers = array_merge($handlers, $this->handlers);
+
+                    $result = $generator->current();
                 }
             }
 
@@ -119,8 +151,9 @@ class Application extends \Pimple implements HttpKernelInterface
             }
         }
 
+        $response = $this['context']->getResponse();
         $this['context']->popRequest();
 
-        return $this['context']->getResponse();
+        return $response;
     }
 }

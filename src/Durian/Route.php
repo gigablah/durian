@@ -39,8 +39,7 @@ class Route
         }
 
         foreach ($this->children as $child) {
-            $childRoutes = $child->dump();
-            foreach ($childRoutes as $path => $methods) {
+            foreach ($child->dump() as $path => $methods) {
                 foreach ($methods as $method => $methodHandlers) {
                     $routes[$path][$method] = array_merge($handlers, $methodHandlers);
                 }
@@ -79,7 +78,7 @@ class Route
             $this->methods[$method] = array();
         }
 
-        array_merge($this->methods[$method], $handlers);
+        $this->methods[$method] += $handlers;
 
         return $this;
     }
