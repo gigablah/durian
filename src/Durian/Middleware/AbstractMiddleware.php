@@ -15,7 +15,7 @@ class AbstractMiddleware
 {
     protected $app;
 
-    public function setApplication(Application $app)
+    public function bindTo(Application $app)
     {
         $this->app = $app;
     }

@@ -100,28 +100,41 @@ class Application extends \Pimple implements HttpKernelInterface
      */
     public function handle(Request $request, $type = HttpKernelInterface::MASTER_REQUEST, $catch = true)
     {
-        $generators = array();
         $this['context']->pushRequest($request);
 
+        $generators = array();
+
+        $handlerCallback = function () {
+            foreach ($this->handlers as $handler) {
+                $generator = (yield $handler);
+
+                if ($generator instanceof \Generator) {
+                    $handler = $generator->current();
+                    while ($handler instanceof Handler) {
+                        yield $handler;
+                        $generator->next();
+                        $handler = $generator->current();
+                    }
+                }
+            }
+        };
+
+        $handlerGenerator = $handlerCallback();
+
         try {
-            while ($handler = array_shift($this->handlers)) {
-                $handler->bind($this);
+            while ($handlerGenerator->valid()) {
+                $handler = $handlerGenerator->current();
+                $handler->bindTo($this);
 
                 $result = call_user_func($handler);
 
                 if ($result instanceof \Generator) {
-                    $handlers = array();
                     $generator = $result;
                     array_push($generators, $generator);
-
-                    while ($generator->current() instanceof Handler) {
-                        array_push($handlers, $generator->current());
-                        $generator->next();
-                    }
-
-                    $this->handlers = array_merge($handlers, $this->handlers);
-
                     $result = $generator->current();
+                    $handlerGenerator->send($generator);
+                } else {
+                    $handlerGenerator->next();
                 }
             }
 

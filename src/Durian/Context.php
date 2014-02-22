@@ -13,8 +13,8 @@ use Symfony\Component\HttpFoundation\Response;
 class Context
 {
     public $params = array();
-    private $requests = array();
-    private $responses = array();
+    protected $requests = array();
+    protected $responses = array();
 
     public function pushRequest(Request $request)
     {

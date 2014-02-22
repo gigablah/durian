@@ -20,10 +20,10 @@ class Handler
         $this->test = $test;
     }
 
-    public function bind(Application $app)
+    public function bindTo(Application $app)
     {
         if ($this->callable instanceof AbstractMiddleware) {
-            $this->callable->setApplication($app);
+            $this->callable->bindTo($app);
         } elseif ($this->callable instanceof \Closure) {
             $this->callable = $this->callable->bindTo($app['context']);
         }
