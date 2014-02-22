@@ -56,9 +56,7 @@ class Route
     public function route($path, callable $handlers = null)
     {
         if (null === $handlers) {
-            $handlers = array(function () {
-                yield;
-            });
+            $handlers = array(function () {});
         } else {
             $handlers = func_get_args();
             array_shift($handlers);
