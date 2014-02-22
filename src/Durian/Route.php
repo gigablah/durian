@@ -32,16 +32,15 @@ class Route
     public function dump()
     {
         $routes = array($this->path => array());
-        $handlers = $this->handlers;
 
         foreach ($this->methods as $method => $methodHandlers) {
-            $routes[$this->path][$method] = array_merge($handlers, $methodHandlers);
+            $routes[$this->path][$method] = array_merge($this->handlers, $methodHandlers);
         }
 
         foreach ($this->children as $child) {
             foreach ($child->dump() as $path => $methods) {
                 foreach ($methods as $method => $methodHandlers) {
-                    $routes[$path][$method] = array_merge($handlers, $methodHandlers);
+                    $routes[$path][$method] = array_merge($this->handlers, $methodHandlers);
                 }
             }
         }

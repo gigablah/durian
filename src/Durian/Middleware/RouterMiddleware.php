@@ -36,8 +36,7 @@ class RouterMiddleware extends AbstractMiddleware
         $dispatcher = new Dispatcher($collector->getData());
 
         $request = $this->getRequest();
-
-        $routeInfo = $dispatcher->dispatch($request->getMethod(), $request->getRequestUri());
+        $routeInfo = $dispatcher->dispatch($request->getMethod(), $request->getPathInfo());
 
         switch ($routeInfo[0]) {
             case Dispatcher::NOT_FOUND:
