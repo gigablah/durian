@@ -38,10 +38,14 @@ Routing
 -------
 
 ```php
+$app['awesome_library'] = $app->share(function ($app) {
+    return new MyAwesomeLibrary();
+});
+
 $app->route('/hello', function () use ($app) {
-    $app['giant_library']->performExpensiveOperation();
+    $app['awesome_library']->performExpensiveOperation();
     yield 'Hello ';
-    $app['giant_library']->performCleanUp();
+    $app['awesome_library']->performCleanUp();
 })->route('/{name}', function () {
     return $this->last().$this->param('name');
 })->get(function () {
