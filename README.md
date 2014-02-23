@@ -27,7 +27,7 @@ Usage
 ```php
 $app = new Durian\Application();
 $app->route('/hello/{name}', function () {
-    return 'Hello '.$this->params('name');
+    return 'Hello '.$this->param('name');
 });
 $app->run();
 ```
@@ -133,6 +133,7 @@ $responseTimeMiddleware = $app->handler(function () {
 }, function () use ($app) {
     return isset($app['debug']) && $app['debug'];
 });
+```
 
 This returns a `Handler` object which can now be added to the front or back of the middleware stack:
 
