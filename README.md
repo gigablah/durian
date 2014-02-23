@@ -29,10 +29,10 @@ $app = new Durian\Application();
 $app->route('/hello/{name}', function () {
     return 'Hello '.$this->param('name');
 });
-$app->run();
+$app->run(Symfony\Component\HttpFoundation\Request::createFromGlobals());
 ```
 
-Nothing special there. But since this is a PHP 5.5 microframework, it has been tailored to take advantage of shiny new [generator functions][2]. We'll explore that starting with `Application::route`.
+Nothing special there. The `Application` container is based on [Pimple][2] and inherits its functions for defining lazy loading services. We also make use of the Symfony2 `Request` object so you have access to request headers, parameters and cookies. But since this is a PHP 5.5 microframework, it has been tailored to take advantage of shiny new [generator functions][3]. We'll explore that starting with `Application::route`.
 
 Routing
 -------
@@ -55,7 +55,7 @@ Instead of the hierarchical routing syntax found in some other microframeworks, 
 
 Why method chaining? The simple reason is that embedding the next route or method segment inside the route handler function forces us to execute the handler first before proceeding, thus potentially incurring expensive initialization code even if the request results in an error. Here, we stack the handler functions as each segment matches, and execute all of them in one go only if the route and method match is successful.
 
-(At least, that was the original intention. Currently the framework utilizes [nikic/fast-route][3], which compiles all the routes into a single regex mapping to all handler stack combinations.)
+(At least, that was the original intention. Currently the framework utilizes [nikic/fast-route][4], which compiles all the routes into a single regex mapping to all handler stack combinations.)
 
 Note that `Application::route` starts a new segment and returns a new `Route` object. The method functions map to all the common HTTP request methods (get, post, put, delete, patch, options) and return the same `Route`. All the routing methods accept an arbitrary number of handler functions, so you can encapsulate surrounding operations (such as the ones in the example above) into a separate generator:
 
@@ -153,6 +153,15 @@ $app->handlers([
 
 Middleware can also be defined as concrete classes by extending `AbstractMiddleware`.
 
+Handler Injection
+-----------------
+
+If a handler function returns another `Handler`, it will be inserted into the current position of the execution stack.
+
+Similarly, if a handler function produces a generator that yields handlers, the whole collection will be inserted into the stack. This is exactly how the router middleware works.
+
+In essence, the handler stack is recursively iterated over as a multidimensional array.
+
 Exception Handling
 ------------------
 
@@ -185,6 +194,11 @@ Dependency injection? What's that? :)
 
 Other than the fact that the application container is based on `Pimple`, a lightweight DIC (or service locator, if you're so inclined), no parameter matching is currently performed on route handlers. Eventually I'd like to have it implemented as an optional trait. Watch this space!
 
+HttpKernelInterface
+-------------------
+
+The `Application` container implements Symfony2's `HttpKernelInterface`, so you can compose it with other compatible applications via [Stack][5].
+
 License
 -------
 
@@ -195,15 +209,17 @@ Credits
 
 This project was inspired by the following:
 
-* [koa][4]
-* [Martini][5]
-* [Bullet][6]
-* [Slim][7]
+* [koa][6]
+* [Martini][7]
+* [Bullet][8]
+* [Slim][9]
 
 [1]: http://getcomposer.org
-[2]: http://www.php.net/manual/en/language.generators.overview.php
-[3]: https://github.com/nikic/FastRoute
-[4]: https://github.com/koajs/koa
-[5]: https://github.com/codegangsta/martini
-[6]: https://github.com/vlucas/bulletphp
-[7]: https://github.com/codeguy/Slim
+[2]: http://pimple.sensiolabs.org
+[3]: http://www.php.net/manual/en/language.generators.overview.php
+[4]: https://github.com/nikic/FastRoute
+[5]: http://stackphp.com
+[6]: https://github.com/koajs/koa
+[7]: https://github.com/codegangsta/martini
+[8]: https://github.com/vlucas/bulletphp
+[9]: https://github.com/codeguy/Slim
