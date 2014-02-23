@@ -14,12 +14,23 @@ class Handler
     private $payload;
     private $test;
 
+    /**
+     * Constructor.
+     *
+     * @param mixed $payload Callable to execute or value to return
+     * @param mixed $test    Callable or value that determines if the handler is valid
+     */
     public function __construct($payload, $test = null)
     {
         $this->payload = $payload;
         $this->test = $test;
     }
 
+    /**
+     * Bind to the application context.
+     *
+     * @param Application $app The application container
+     */
     public function bindTo(Application $app)
     {
         if ($this->payload instanceof AbstractMiddleware) {
@@ -33,6 +44,11 @@ class Handler
         }
     }
 
+    /**
+     * Evaluate the test (if any) and invoke the payload accordingly.
+     *
+     * @return mixed The handler output
+     */
     public function __invoke()
     {
         if (is_callable($this->test) && !call_user_func($this->test)) {

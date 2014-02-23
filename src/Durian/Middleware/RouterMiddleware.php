@@ -17,6 +17,16 @@ use Symfony\Component\HttpKernel\Exception\MethodNotAllowedHttpException;
  */
 class RouterMiddleware extends AbstractMiddleware
 {
+    /**
+     * Compile all the routes and match the resulting regex against the current request.
+     *
+     * If a match is found, yield each handler associated with the route.
+     *
+     * @yields Handler Handler associated with the matched route
+     *
+     * @throws NotFoundHttpException if no matching route is found
+     * @throws MethodNotAllowedException if no matching method is found for the route
+     */
     public function __invoke()
     {
         $collector = new RouteCollector(new RouteParser(), new DataGenerator());

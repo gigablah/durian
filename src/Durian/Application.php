@@ -20,10 +20,16 @@ class Application extends \Pimple implements HttpKernelInterface
 
     const VERSION = '0.0.1';
 
+    /**
+     * Constructor.
+     *
+     * @param array $values Defaults to override
+     */
     public function __construct(array $values = [])
     {
         parent::__construct();
 
+        $this['debug'] = false;
         $this['routes'] = [];
 
         $this->handlers = [new RouterMiddleware()];
@@ -33,6 +39,14 @@ class Application extends \Pimple implements HttpKernelInterface
         }
     }
 
+    /**
+     * Package a callable and optional test as a handler.
+     *
+     * @param mixed $handler A callable, value or service identifier
+     * @param mixed $test    A callable or value
+     *
+     * @return Handler The packaged handler
+     */
     public function handler($handler, $test = null)
     {
         if (!is_callable($handler) && isset($this[$handler])) {
@@ -42,16 +56,34 @@ class Application extends \Pimple implements HttpKernelInterface
         return $handler instanceof Handler ? $handler : new Handler($handler, $test);
     }
 
+    /**
+     * Prepend a handler to the middleware stack.
+     *
+     * @param mixed $handler A callable, value or service identifier
+     * @param mixed $test    A callable or value
+     */
     public function before($handler, $test = null)
     {
         array_unshift($this->handlers, $this->handler($handler, $test));
     }
 
+    /**
+     * Append a handler to the middleware stack.
+     *
+     * @param mixed $handler A callable, value or service identifier
+     * @param mixed $test    A callable or value
+     */
     public function after($handler, $test = null)
     {
         array_push($this->handlers, $this->handler($handler, $test));
     }
 
+    /**
+     * Manipulate the middleware stack.
+     *
+     * @param array   $handlers An array of handlers
+     * @param Boolean $replace  Whether to replace the entire stack
+     */
     public function handlers(array $handlers, $replace = true)
     {
         if ($replace) {
@@ -63,6 +95,14 @@ class Application extends \Pimple implements HttpKernelInterface
         }
     }
 
+    /**
+     * Associate a route segment with a collection of handlers.
+     *
+     * @param string $path     Path or pattern to match
+     * @param mixed  $handlers Handlers to execute for the path segment
+     *
+     * @return Route A Route segment
+     */
     public function route($path, $handlers = null)
     {
         if (null === $handlers) {
@@ -78,6 +118,14 @@ class Application extends \Pimple implements HttpKernelInterface
         return $route;
     }
 
+    /**
+     * Insert request, retrieve response.
+     *
+     * @param string|Request $request The HTTP method or a Request object
+     * @param string         $path    The requested path
+     *
+     * @return Response The HTTP Response
+     */
     public function run($request = null, $path = null)
     {
         if (!$request instanceof Request) {
@@ -106,11 +154,12 @@ class Application extends \Pimple implements HttpKernelInterface
      */
     public function handle(Request $request, $type = HttpKernelInterface::MASTER_REQUEST, $catch = true)
     {
-        $this['context'] = new Context($request);
+        $this['context'] = new Context($type, $request);
         array_push($this->context, $this['context']);
 
         $generators = [];
 
+        // Produces a generator that recursively iterates through the handler stack
         $handlerCallback = function () {
             foreach ($this->handlers as $handler) {
                 $result = (yield $handler);
@@ -155,6 +204,7 @@ class Application extends \Pimple implements HttpKernelInterface
                 $this['context']->append($result);
             }
 
+            // Revisit all generators in reverse order
             while (count($generators)) {
                 $generator = array_pop($generators);
                 $generator->next();
@@ -165,6 +215,8 @@ class Application extends \Pimple implements HttpKernelInterface
             }
 
             $caught = false;
+
+            // Bubble the exception through all generators until handled
             while (count($generators)) {
                 $generator = array_pop($generators);
 

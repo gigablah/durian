@@ -65,14 +65,22 @@ Note that `Application::route` starts a new segment and returns a new `Route` ob
 
 ```php
 $expensiveOperation = function () use ($app) {
-    $app['giant_library']->performExpensiveOperation();
+    $app['awesome_library']->performExpensiveOperation();
     yield;
-    $app['giant_library']->performCleanUp();
+    $app['awesome_library']->performCleanUp();
 };
 
 $app->route('/hello', $expensiveOperation, function () use ($app) {
     return 'Hello ';
 })->route(...);
+```
+
+You don't necessarily have to chain route segments, the old-fashioned way of defining entire paths will still work fine:
+
+```php
+$app->route('/users')->get(function () {});
+$app->route('/users/{name}')->get(function () {});
+$app->route('/users/{name}/friends')->get(function () {});
 ```
 
 Return values are automatically converted to Symfony2 `Response` objects. Arrays will result in a `JsonResponse`. You may also manually craft a response:
@@ -135,7 +143,7 @@ $responseTimeMiddleware = $app->handler(function () {
     yield;
     $this->getResponse()->headers->set('X-Response-Time', sprintf('%fms', microtime(true) - $time));
 }, function () use ($app) {
-    return isset($app['debug']) && $app['debug'];
+    return $this->isMasterRequest() && $app['debug'];
 });
 ```
 
