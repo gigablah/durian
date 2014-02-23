@@ -22,7 +22,7 @@ class RouterMiddleware extends AbstractMiddleware
         $collector = new RouteCollector(new RouteParser(), new DataGenerator());
 
         $routes = $this->app['routes'];
-        $dump = array();
+        $dump = [];
         foreach ($routes as $route) {
             $dump = array_merge_recursive($dump, $route->dump());
         }
@@ -47,7 +47,7 @@ class RouterMiddleware extends AbstractMiddleware
                 throw new MethodNotAllowedHttpException($allowedMethods);
                 break;
             case Dispatcher::FOUND:
-                $this->app['context']->params += $routeInfo[2];
+                $this->app['context']->setParams($routeInfo[2]);
                 foreach ($routeInfo[1] as $handler) {
                     $handler = new Handler($handler);
                     yield $handler;

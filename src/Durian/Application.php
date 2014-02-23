@@ -6,6 +6,7 @@ use Durian\Middleware\AbstractMiddleware;
 use Durian\Middleware\RouterMiddleware;
 use Symfony\Component\HttpKernel\HttpKernelInterface;
 use Symfony\Component\HttpFoundation\Request;
+use Symfony\Component\HttpFoundation\Response;
 
 /**
  * The Durian Application container.
@@ -14,18 +15,18 @@ use Symfony\Component\HttpFoundation\Request;
  */
 class Application extends \Pimple implements HttpKernelInterface
 {
-    private $handlers = array();
+    protected $handlers = [];
+    protected $context = [];
 
     const VERSION = '0.0.1';
 
-    public function __construct(array $values = array())
+    public function __construct(array $values = [])
     {
         parent::__construct();
 
-        $this['context'] = new Context();
-        $this['routes'] = array();
+        $this['routes'] = [];
 
-        $this->handlers = array(new RouterMiddleware());
+        $this->handlers = [new RouterMiddleware()];
 
         foreach ($values as $key => $value) {
             $this[$key] = $value;
@@ -54,7 +55,7 @@ class Application extends \Pimple implements HttpKernelInterface
     public function handlers(array $handlers, $replace = true)
     {
         if ($replace) {
-            $this->handlers = array();
+            $this->handlers = [];
         }
 
         foreach ($handlers as $handler) {
@@ -62,17 +63,17 @@ class Application extends \Pimple implements HttpKernelInterface
         }
     }
 
-    public function route($path, callable $handlers = null)
+    public function route($path, $handlers = null)
     {
         if (null === $handlers) {
-            $handlers = array(function () {});
+            $handlers = [function () {}];
         } else {
             $handlers = func_get_args();
             array_shift($handlers);
         }
 
         $route = Route::create($path, $handlers);
-        $this['routes'] = array_merge($this['routes'], array($path => $route));
+        $this['routes'] = array_merge($this['routes'], [$path => $route]);
 
         return $route;
     }
@@ -87,11 +88,16 @@ class Application extends \Pimple implements HttpKernelInterface
             }
         }
 
-        $type = $this['context']->hasRequest()
+        $type = count($this->context)
             ? HttpKernelInterface::SUB_REQUEST
             : HttpKernelInterface::MASTER_REQUEST;
 
         $response = $this->handle($request, $type);
+
+        if (HttpKernelInterface::SUB_REQUEST === $type) {
+            return $response;
+        }
+
         $response->send();
     }
 
@@ -100,20 +106,23 @@ class Application extends \Pimple implements HttpKernelInterface
      */
     public function handle(Request $request, $type = HttpKernelInterface::MASTER_REQUEST, $catch = true)
     {
-        $this['context']->pushRequest($request);
+        $this['context'] = new Context($request);
+        array_push($this->context, $this['context']);
 
-        $generators = array();
+        $generators = [];
 
         $handlerCallback = function () {
             foreach ($this->handlers as $handler) {
-                $generator = (yield $handler);
+                $result = (yield $handler);
 
-                if ($generator instanceof \Generator) {
-                    $handler = $generator->current();
+                if ($result instanceof Handler) {
+                    yield $result;
+                } elseif ($result instanceof \Generator) {
+                    $handler = $result->current();
                     while ($handler instanceof Handler) {
                         yield $handler;
-                        $generator->next();
-                        $handler = $generator->current();
+                        $result->next();
+                        $handler = $result->current();
                     }
                 }
             }
@@ -130,12 +139,20 @@ class Application extends \Pimple implements HttpKernelInterface
 
                 if ($result instanceof \Generator) {
                     $generator = $result;
-                    array_push($generators, $generator);
                     $result = $generator->current();
+                    array_push($generators, $generator);
                     $handlerGenerator->send($generator);
+                } elseif ($result instanceof Handler) {
+                    $handlerGenerator->send($result);
                 } else {
                     $handlerGenerator->next();
                 }
+
+                if ($result instanceof Handler) {
+                    $result = null;
+                }
+
+                $this['context']->append($result);
             }
 
             while (count($generators)) {
@@ -165,7 +182,9 @@ class Application extends \Pimple implements HttpKernelInterface
         }
 
         $response = $this['context']->getResponse();
-        $this['context']->popRequest();
+
+        array_pop($this->context);
+        $this['context'] = end($this->context);
 
         return $response;
     }

@@ -3,7 +3,7 @@
 namespace Durian;
 
 /**
- * Routing context.
+ * Representation of a route segment.
  *
  * @author Chris Heng <bigblah@gmail.com>
  */
@@ -15,23 +15,23 @@ class Route
     private $children;
     private $methods;
 
-    public function __construct($path, array $handlers = array(), Route $parent = null)
+    public function __construct($path, array $handlers = [], Route $parent = null)
     {
-        $this->path = sprintf('%s/%s', $parent ? rtrim($parent->getPath(), '/') : '', $path);
+        $this->path = sprintf('%s%s', $parent ? rtrim($parent->getPath(), '/') : '', $path);
         $this->handlers = $handlers;
         $this->parent = $parent;
-        $this->children = array();
-        $this->methods = array('GET' => array());
+        $this->children = [];
+        $this->methods = ['GET' => []];
     }
 
-    public static function create($path, array $handlers = array(), Route $parent = null)
+    public static function create($path, array $handlers = [], Route $parent = null)
     {
         return new static($path, $handlers, $parent);
     }
 
     public function dump()
     {
-        $routes = array($this->path => array());
+        $routes = [$this->path => []];
 
         foreach ($this->methods as $method => $methodHandlers) {
             $routes[$this->path][$method] = array_merge($this->handlers, $methodHandlers);
@@ -56,7 +56,7 @@ class Route
     public function route($path, callable $handlers = null)
     {
         if (null === $handlers) {
-            $handlers = array(function () {});
+            $handlers = [function () {}];
         } else {
             $handlers = func_get_args();
             array_shift($handlers);
@@ -67,12 +67,12 @@ class Route
         return $route;
     }
 
-    public function method($method, array $handlers = array())
+    public function method($method, array $handlers = [])
     {
         $method = strtoupper($method);
 
         if (!isset($this->methods[$method])) {
-            $this->methods[$method] = array();
+            $this->methods[$method] = [];
         }
 
         $this->methods[$method] += $handlers;

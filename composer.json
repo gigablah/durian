@@ -2,7 +2,7 @@
     "name": "gigablah/durian",
     "version": "0.0.1",
     "type": "library",
-    "description": "A pungent PHP 5.5 microframework.",
+    "description": "A pungent PHP 5.5 microframework based on generator-style middleware.",
     "keywords": ["framework", "micro", "microframework"],
     "homepage": "http://gigablah.com",
     "license" : "MIT",

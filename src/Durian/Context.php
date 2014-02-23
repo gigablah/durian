@@ -4,6 +4,7 @@ namespace Durian;
 
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\HttpFoundation\JsonResponse;
 
 /**
  * Request/response context.
@@ -12,55 +13,67 @@ use Symfony\Component\HttpFoundation\Response;
  */
 class Context
 {
-    public $params = array();
-    protected $requests = array();
-    protected $responses = array();
+    protected $values = [];
+    protected $params = [];
+    protected $request;
+    protected $response;
 
-    public function pushRequest(Request $request)
+    public function __construct(Request $request = null)
     {
-        array_push($this->requests, $request);
-        array_push($this->responses, null);
+        $this->request = $request;
     }
 
-    public function popRequest()
+    public function setRequest(Request $request)
     {
-        if (!$this->hasRequest()) {
-            return null;
-        }
-
-        array_pop($this->responses);
-
-        return array_pop($this->requests);
+        $this->request = $request;
     }
 
     public function getRequest()
     {
-        if (!$this->hasRequest()) {
-            return null;
+        return $this->request;
+    }
+
+    public function setResponse($response, $code = 200, array $headers = [])
+    {
+        if (!$response instanceof Response) {
+            $response = Response::create($response, $code, $headers);
         }
 
-        return end($this->requests);
-    }
-
-    public function hasRequest()
-    {
-        return count($this->requests) > 0;
-    }
-
-    public function setResponse(Response $response)
-    {
-        end($this->responses);
-        $index = key($this->responses);
-        $this->responses[$index] = $response;
+        $this->response = $response;
     }
 
     public function getResponse()
     {
-        return end($this->responses);
+        if (!$this->hasResponse()) {
+            $result = $this->last();
+            $this->setResponse(is_array($result) ? new JsonResponse($result) : new Response($result));
+        }
+
+        return $this->response;
     }
 
     public function hasResponse()
     {
-        return null !== end($this->responses);
+        return null !== $this->response;
+    }
+
+    public function setParams(array $params)
+    {
+        $this->params += $params;
+    }
+
+    public function param($key, $default = null)
+    {
+        return isset($this->params[$key]) ? $this->params[$key] : $default;
+    }
+
+    public function append($value)
+    {
+        array_push($this->values, $value);
+    }
+
+    public function last()
+    {
+        return end($this->values);
     }
 }
