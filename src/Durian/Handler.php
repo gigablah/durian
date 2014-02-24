@@ -20,7 +20,7 @@ class Handler
      * @param mixed $payload Callable to execute or value to return
      * @param mixed $test    Callable or value that determines if the handler is valid
      */
-    public function __construct($payload, $test = null)
+    public function __construct($payload = null, $test = null)
     {
         $this->payload = $payload;
         $this->test = $test;

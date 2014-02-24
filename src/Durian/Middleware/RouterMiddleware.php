@@ -45,7 +45,7 @@ class RouterMiddleware extends AbstractMiddleware
 
         $dispatcher = new Dispatcher($collector->getData());
 
-        $request = $this->getRequest();
+        $request = $this->request();
         $routeInfo = $dispatcher->dispatch($request->getMethod(), $request->getPathInfo());
 
         switch ($routeInfo[0]) {
@@ -57,7 +57,7 @@ class RouterMiddleware extends AbstractMiddleware
                 throw new MethodNotAllowedHttpException($allowedMethods);
                 break;
             case Dispatcher::FOUND:
-                $this->app['context']->setParams($routeInfo[2]);
+                $this->app['context']->map($routeInfo[2]);
                 foreach ($routeInfo[1] as $handler) {
                     $handler = new Handler($handler);
                     yield $handler;

@@ -24,7 +24,7 @@ class Route
      */
     public function __construct($path, array $handlers = [], Route $parent = null)
     {
-        $this->path = sprintf('%s%s', $parent ? rtrim($parent->getPath(), '/') : '', $path);
+        $this->path = sprintf('%s%s', $parent ? rtrim($parent->path(), '/') : '', $path);
         $this->handlers = $handlers;
         $this->parent = $parent;
         $this->children = [];
@@ -72,7 +72,7 @@ class Route
      *
      * @return string The route path
      */
-    public function getPath()
+    public function path()
     {
         return $this->path;
     }
@@ -100,22 +100,29 @@ class Route
     }
 
     /**
-     * Handle a HTTP method for the route.
+     * Handle HTTP methods for the route.
      *
-     * @param string $method   HTTP method to match
-     * @param array  $handlers Array of handlers to execute for the method
+     * @param string $method   HTTP method(s) to match, separated by pipe characters
+     * @param array  $handlers Array of handlers to execute for the method(s)
      *
      * @return Route The current route
      */
     public function method($method, array $handlers = [])
     {
-        $method = strtoupper($method);
-
-        if (!isset($this->methods[$method])) {
-            $this->methods[$method] = [];
+        if (!is_array($handlers)) {
+            $handlers = func_get_args();
+            array_shift($handlers);
         }
 
-        $this->methods[$method] += $handlers;
+        $methods = explode('|', strtoupper($method));
+
+        foreach ($methods as $method) {
+            if (!isset($this->methods[$method])) {
+                $this->methods[$method] = [];
+            }
+
+            $this->methods[$method] += $handlers;
+        }
 
         return $this;
     }
@@ -127,7 +134,7 @@ class Route
      *
      * @return Route The current route
      */
-    public function get($handler)
+    public function get($handler = null)
     {
         return $this->method('GET', func_get_args());
     }
@@ -139,7 +146,7 @@ class Route
      *
      * @return Route The current route
      */
-    public function post($handler)
+    public function post($handler = null)
     {
         return $this->method('POST', func_get_args());
     }
@@ -151,7 +158,7 @@ class Route
      *
      * @return Route The current route
      */
-    public function put($handler)
+    public function put($handler = null)
     {
         return $this->method('PUT', func_get_args());
     }
@@ -163,7 +170,7 @@ class Route
      *
      * @return Route The current route
      */
-    public function delete($handler)
+    public function delete($handler = null)
     {
         return $this->method('DELETE', func_get_args());
     }
@@ -175,7 +182,7 @@ class Route
      *
      * @return Route The current route
      */
-    public function patch($handler)
+    public function patch($handler = null)
     {
         return $this->method('PATCH', func_get_args());
     }
@@ -187,7 +194,7 @@ class Route
      *
      * @return Route The current route
      */
-    public function options($handler)
+    public function options($handler = null)
     {
         return $this->method('OPTIONS', func_get_args());
     }
@@ -199,7 +206,7 @@ class Route
      *
      * @return Route The current route
      */
-    public function head($handler)
+    public function head($handler = null)
     {
         return $this->method('HEAD', func_get_args());
     }

@@ -26,52 +26,51 @@ class AbstractMiddleware
     }
 
     /**
-     * Check whether the context contains a request.
+     * Set or get the request for the current context.
      *
-     * @return Boolean True if the request is set, false otherwise
-     */
-    public function hasRequest()
-    {
-        return $this->app['context']->hasRequest();
-    }
-
-    /**
-     * Retrieve the request from the context.
+     * @param Request $request The request object
      *
      * @return Request The current request
      */
-    public function getRequest()
+    public function request(Request $request = null)
     {
-        return $this->app['context']->getRequest();
+        return $this->app['context']->request($request);
     }
 
     /**
-     * Check whether the response has been set.
+     * Set or get the response for the current context.
      *
-     * @return Boolean True if the response is set, false otherwise
-     */
-    public function hasResponse()
-    {
-        return $this->app['context']->hasResponse();
-    }
-
-    /**
-     * Retrieve the response from the context.
+     * @param string|Response $response Response string or object
+     * @param integer         $status   HTTP status code
+     * @param array           $headers  Response headers to set
      *
      * @return Response The current response
      */
-    public function getResponse()
+    public function response($response = null, $status = 200, array $headers = [])
     {
-        return $this->app['context']->getResponse();
+        return $this->app['context']->response($response, $status, $headers);
     }
 
     /**
-     * Set the response for the current context.
+     * Retrieve a route parameter.
      *
-     * @param Response $response The response object
+     * @param string $key     The parameter name
+     * @param mixed  $default Fallback value
+     *
+     * @return mixed The route parameter
      */
-    public function setResponse(Response $response)
+    public function param($key, $default = null)
     {
-        $this->app['context']->setResponse($response);
+        return $this->app['context']->param($key, $default);
+    }
+
+    /**
+     * Retrieve the last handler output.
+     *
+     * @return mixed The last handler output
+     */
+    public function last()
+    {
+        return $this->app['context']->last();
     }
 }

@@ -3,9 +3,9 @@
 namespace Durian;
 
 use Symfony\Component\HttpKernel\HttpKernelInterface;
+use Symfony\Component\HttpKernel\Exception\HttpException;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
-use Symfony\Component\HttpFoundation\JsonResponse;
 
 /**
  * Request/response context.
@@ -14,11 +14,11 @@ use Symfony\Component\HttpFoundation\JsonResponse;
  */
 class Context
 {
-    protected $values = [];
-    protected $params = [];
-    protected $type;
-    protected $request;
-    protected $response;
+    private $params = [];
+    private $output = [];
+    private $type;
+    private $request;
+    private $response;
 
     /**
      * Constructor.
@@ -33,23 +33,64 @@ class Context
     }
 
     /**
-     * Set the request for the current context.
+     * Set or get the request for the current context.
      *
      * @param Request $request The request object
+     *
+     * @return Request The current request
      */
-    public function setRequest(Request $request)
+    public function request(Request $request = null)
     {
+        if (null === $request) {
+            return $this->request;
+        }
+
         $this->request = $request;
     }
 
     /**
-     * Retrieve the request from the context.
+     * Set or get the response for the current context.
      *
-     * @return Request The current request
+     * @param string|Response $response Response string or object
+     * @param integer         $status   HTTP status code
+     * @param array           $headers  Response headers to set
+     *
+     * @return Response The current response
      */
-    public function getRequest()
+    public function response($response = null, $status = 200, array $headers = [])
     {
-        return $this->request;
+        if (null === $response) {
+            return $this->response;
+        }
+
+        if (!$response instanceof Response) {
+            $response = Response::create($response, $status, $headers);
+        }
+
+        $this->response = $response;
+    }
+
+    /**
+     * Throws an exception. Automatically maps to Symfony2's HttpException.
+     *
+     * @param string|\Exception $exception Exception message or object
+     * @param integer           $status    HTTP status code
+     * @param array             $headers   Response headers to set
+     * @param mixed             $code      Exception code
+     *
+     * @throws \Exception
+     */
+    public function error($exception, $status = 500, array $headers = [], $code = 0)
+    {
+        if ($exception instanceof \Exception) {
+            $message = $exception->getMessage();
+            $code = $code ?: $exception->getCode();
+        } else {
+            $message = $exception;
+            $exception = null;
+        }
+
+        throw new HttpException($status, $message, $exception, $headers, $code);
     }
 
     /**
@@ -57,50 +98,9 @@ class Context
      *
      * @return Boolean True if master request, false otherwise
      */
-    public function isMasterRequest()
+    public function master()
     {
         return HttpKernelInterface::MASTER_REQUEST === $this->type;
-    }
-
-    /**
-     * Set the response for the current context.
-     *
-     * @param string|Response $response Response string or a response object
-     * @param integer         $code     HTTP status code
-     * @param array           $headers  Response headers to set
-     */
-    public function setResponse($response, $code = 200, array $headers = [])
-    {
-        if (!$response instanceof Response) {
-            $response = Response::create($response, $code, $headers);
-        }
-
-        $this->response = $response;
-    }
-
-    /**
-     * Retrieve the response from the context.
-     *
-     * @return Response The current response
-     */
-    public function getResponse()
-    {
-        if (!$this->hasResponse()) {
-            $result = $this->last();
-            $this->setResponse(is_array($result) ? new JsonResponse($result) : new Response($result));
-        }
-
-        return $this->response;
-    }
-
-    /**
-     * Check whether the response has been set.
-     *
-     * @return Boolean True if the response is set, false otherwise
-     */
-    public function hasResponse()
-    {
-        return null !== $this->response;
     }
 
     /**
@@ -108,7 +108,7 @@ class Context
      *
      * @param array $params Mapped route parameters
      */
-    public function setParams(array $params)
+    public function map(array $params)
     {
         $this->params += $params;
     }
@@ -131,9 +131,9 @@ class Context
      *
      * @param mixed $value Handler output
      */
-    public function append($value)
+    public function append($output)
     {
-        array_push($this->values, $value);
+        $this->output[] = $output;
     }
 
     /**
@@ -143,6 +143,6 @@ class Context
      */
     public function last()
     {
-        return end($this->values);
+        return end($this->output);
     }
 }

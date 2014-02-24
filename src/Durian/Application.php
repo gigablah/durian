@@ -2,7 +2,7 @@
 
 namespace Durian;
 
-use Durian\Middleware\AbstractMiddleware;
+use Durian\Middleware\ResponseMiddleware;
 use Durian\Middleware\RouterMiddleware;
 use Symfony\Component\HttpKernel\HttpKernelInterface;
 use Symfony\Component\HttpFoundation\Request;
@@ -32,7 +32,10 @@ class Application extends \Pimple implements HttpKernelInterface
         $this['debug'] = false;
         $this['routes'] = [];
 
-        $this->handlers = [new RouterMiddleware()];
+        $this->handlers = [
+            new ResponseMiddleware(),
+            new RouterMiddleware()
+        ];
 
         foreach ($values as $key => $value) {
             $this[$key] = $value;
@@ -140,7 +143,7 @@ class Application extends \Pimple implements HttpKernelInterface
             ? HttpKernelInterface::SUB_REQUEST
             : HttpKernelInterface::MASTER_REQUEST;
 
-        $response = $this->handle($request, $type);
+        $response = $this->handle($request, $type, !$this['debug']);
 
         if (HttpKernelInterface::SUB_REQUEST === $type) {
             return $response;
@@ -197,11 +200,9 @@ class Application extends \Pimple implements HttpKernelInterface
                     $handlerGenerator->next();
                 }
 
-                if ($result instanceof Handler) {
-                    $result = null;
+                if (!$result instanceof Handler) {
+                    $this['context']->append($result);
                 }
-
-                $this['context']->append($result);
             }
 
             // Revisit all generators in reverse order
@@ -233,7 +234,7 @@ class Application extends \Pimple implements HttpKernelInterface
             }
         }
 
-        $response = $this['context']->getResponse();
+        $response = $this['context']->response();
 
         array_pop($this->context);
         $this['context'] = end($this->context);
