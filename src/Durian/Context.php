@@ -23,13 +23,13 @@ class Context
     /**
      * Constructor.
      *
-     * @param string  $type    Request type
      * @param Request $request The Request object
+     * @param integer $type    Request type (master or subrequest)
      */
-    public function __construct($type = HttpKernelInterface::MASTER_REQUEST, Request $request = null)
+    public function __construct(Request $request = null, $type = HttpKernelInterface::MASTER_REQUEST)
     {
-        $this->type = $type;
         $this->request = $request;
+        $this->type = $type;
     }
 
     /**
@@ -37,7 +37,7 @@ class Context
      *
      * @param Request $request The request object
      *
-     * @return Request The current request
+     * @return Request The current request if no arguments passed
      */
     public function request(Request $request = null)
     {
@@ -55,7 +55,7 @@ class Context
      * @param integer         $status   HTTP status code
      * @param array           $headers  Response headers to set
      *
-     * @return Response The current response
+     * @return Response The current response if no arguments passed
      */
     public function response($response = null, $status = 200, array $headers = [])
     {
@@ -80,7 +80,7 @@ class Context
      *
      * @throws \Exception
      */
-    public function error($exception, $status = 500, array $headers = [], $code = 0)
+    public function error($exception = '', $status = 500, array $headers = [], $code = 0)
     {
         if ($exception instanceof \Exception) {
             $message = $exception->getMessage();
@@ -104,16 +104,6 @@ class Context
     }
 
     /**
-     * Insert mapped route parameters into the context.
-     *
-     * @param array $params Mapped route parameters
-     */
-    public function map(array $params)
-    {
-        $this->params += $params;
-    }
-
-    /**
      * Retrieve a route parameter.
      *
      * @param string $key     The parameter name
@@ -124,6 +114,22 @@ class Context
     public function param($key, $default = null)
     {
         return isset($this->params[$key]) ? $this->params[$key] : $default;
+    }
+
+    /**
+     * Insert or retrieve route parameters.
+     *
+     * @param array $params Route parameters to insert
+     *
+     * @return array Route parameters if no arguments passed
+     */
+    public function params(array $params = null)
+    {
+        if (null === $params) {
+            return $this->params;
+        }
+
+        $this->params = $params + $this->params;
     }
 
     /**
@@ -143,6 +149,10 @@ class Context
      */
     public function last()
     {
-        return end($this->output);
+        if (count($this->output)) {
+            return end($this->output);
+        }
+
+        return null;
     }
 }

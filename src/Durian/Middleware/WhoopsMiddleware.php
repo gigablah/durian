@@ -13,16 +13,16 @@ use Whoops\Handler\PrettyPageHandler;
  */
 class WhoopsMiddleware extends AbstractMiddleware
 {
-    private $whoops;
-
     /**
      * Register Whoops as an exception handler.
+     *
+     * @param Application $app The application container
      */
-    public function __construct()
+    public function __construct(Application $app)
     {
-        $this->whoops = new Run();
-        $this->whoops->pushHandler(new PrettyPageHandler());
-        $this->whoops->register();
+        $app['whoops'] = new Run();
+        $app['whoops']->pushHandler(new PrettyPageHandler());
+        $app['whoops']->register();
     }
 
     /**
@@ -33,7 +33,9 @@ class WhoopsMiddleware extends AbstractMiddleware
         try {
             yield;
         } catch (\Exception $exception) {
-            $this->whoops->handleException($exception);
+            $this->app['whoops']->writeToOutput(false);
+            $this->app['whoops']->allowQuit(false);
+            $this->response($this->app['whoops']->handleException($exception), 500);
         }
     }
 }

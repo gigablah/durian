@@ -2,7 +2,6 @@
 
 namespace Durian\Middleware;
 
-use Durian\Handler;
 use FastRoute\RouteCollector;
 use FastRoute\RouteParser\Std as RouteParser;
 use FastRoute\DataGenerator\GroupCountBased as DataGenerator;
@@ -22,7 +21,7 @@ class RouterMiddleware extends AbstractMiddleware
      *
      * If a match is found, yield each handler associated with the route.
      *
-     * @yields Handler Handler associated with the matched route
+     * @yields \Durian\Handler Handler associated with the matched route
      *
      * @throws NotFoundHttpException if no matching route is found
      * @throws MethodNotAllowedException if no matching method is found for the route
@@ -31,9 +30,8 @@ class RouterMiddleware extends AbstractMiddleware
     {
         $collector = new RouteCollector(new RouteParser(), new DataGenerator());
 
-        $routes = $this->app['routes'];
         $dump = [];
-        foreach ($routes as $route) {
+        foreach ($this->app->routes() as $route) {
             $dump = array_merge_recursive($dump, $route->dump());
         }
 
@@ -46,21 +44,20 @@ class RouterMiddleware extends AbstractMiddleware
         $dispatcher = new Dispatcher($collector->getData());
 
         $request = $this->request();
-        $routeInfo = $dispatcher->dispatch($request->getMethod(), $request->getPathInfo());
+        $result = $dispatcher->dispatch($request->getMethod(), $request->getPathInfo());
 
-        switch ($routeInfo[0]) {
+        switch ($result[0]) {
             case Dispatcher::NOT_FOUND:
                 throw new NotFoundHttpException();
                 break;
             case Dispatcher::METHOD_NOT_ALLOWED:
-                $allowedMethods = $routeInfo[1];
-                throw new MethodNotAllowedHttpException($allowedMethods);
+                $methods = $result[1];
+                throw new MethodNotAllowedHttpException($methods);
                 break;
             case Dispatcher::FOUND:
-                $this->app['context']->map($routeInfo[2]);
-                foreach ($routeInfo[1] as $handler) {
-                    $handler = new Handler($handler);
-                    yield $handler;
+                $this->app->context()->params($result[2]);
+                foreach ($result[1] as $handler) {
+                    yield $this->app->handler($handler);
                 }
                 break;
         }

@@ -1,7 +1,9 @@
 Durian
 ======
 
-A pungent PHP 5.5 microframework based on generator-style middleware.
+[![Build Status](https://travis-ci.org/gigablah/durian.png?branch=master)](https://travis-ci.org/gigablah/durian) [![Coverage Status](https://coveralls.io/repos/gigablah/durian/badge.png)](https://coveralls.io/r/gigablah/durian)
+
+Durian is a PHP microframework that utilizes the newest features of PHP 5.4, 5.5 together with lightweight library components to create an accessible, compact framework with performant routing and flexible generator-style middleware.
 
 Why?
 ----
@@ -16,7 +18,7 @@ Use [Composer][1] to install the gigablah/durian library by adding it to your `c
 ```json
 {
     "require": {
-        "gigablah/durian": "~0.0.2"
+        "gigablah/durian": "~0.0.3"
     }
 }
 ```
@@ -29,7 +31,7 @@ $app = new Durian\Application();
 $app->route('/hello/{name}', function () {
     return 'Hello '.$this->param('name');
 });
-$app->run(Symfony\Component\HttpFoundation\Request::createFromGlobals());
+$app->run();
 ```
 
 Nothing special there. The `Application` container is based on [Pimple][2] and inherits its functions for defining lazy loading services. We also make use of the Symfony2 `Request` object so you have access to request headers, parameters and cookies. But since this is a PHP 5.5 microframework, it has been tailored to take advantage of shiny new [generator functions][3]. We'll explore that starting with `Application::route`.
@@ -44,10 +46,10 @@ $app['awesome_library'] = $app->share(function ($app) {
 
 $app->route('/hello', function () use ($app) {
     $app['awesome_library']->performExpensiveOperation();
-    yield 'Hello ';
+    yield 'Hello';
     $app['awesome_library']->performCleanUp();
 })->route('/{name}', function () {
-    return $this->last().$this->param('name');
+    return $this->last().' '.$this->param('name');
 })->get(function () {
     return ['method' => 'GET', 'message' => $this->last()];
 })->post(function () {
@@ -71,7 +73,7 @@ $expensiveOperation = function () use ($app) {
 };
 
 $app->route('/hello', $expensiveOperation, function () {
-    return 'Hello ';
+    return 'Hello';
 })->route(...);
 ```
 
@@ -92,7 +94,7 @@ Return values are automatically converted to Symfony2 `Response` objects. Arrays
 
 ```php
 $app->route('/tea', function () use ($app) {
-    $this->response("I'm a teapot", 418);
+    $this->response('I\'m a teapot', 418);
 });
 ```
 
@@ -147,7 +149,8 @@ The pattern of generator stacking applies to the entire application flow, not ju
 $responseTimeMiddleware = $app->handler(function () {
     $time = microtime(true);
     yield;
-    $this->response()->headers->set('X-Response-Time', sprintf('%fms', microtime(true) - $time));
+    $time = microtime(true) - $time;
+    $this->response()->headers->set('X-Response-Time', $time);
 }, function () use ($app) {
     return $this->master() && $app['debug'];
 });
@@ -210,7 +213,7 @@ For pretty exception traces, you can make use of the [filp/whoops][5] library by
 ```json
 {
     "require": {
-        "gigablah/durian": "~0.0.2",
+        "gigablah/durian": "~0.0.3",
         "filp/whoops": "~1.0"
     }
 }
@@ -220,7 +223,7 @@ Then, register `WhoopsMiddleware` as the first handler in your application:
 
 ```php
 $app->handlers([
-    new Durian\Middleware\WhoopsMiddleware()
+    new Durian\Middleware\WhoopsMiddleware($app),
     new Durian\Middleware\RouterMiddleware()
 ]);
 ```
@@ -243,47 +246,53 @@ Method List
 ### Application
 
 ```php
-$app->run($request_or_method, $path);
-$app->route($path, ...$handlers);
-$app->handler($callable, $optional_callable);
-$app->before($callable, $optional_callable);
-$app->after($callable, $optional_callable);
-$app->handlers($handlers, $replace);
-$app->handle($request, $type, $catch);
+$app->run($request); // handle a request or subrequest
+$app->run($method, $path); // handle a HTTP method for a request path
+$app->handler($callable, $optional_callable); // wrap a callback as a Handler
+$app->handlers(); // get the handler stack
+$app->handlers($handlers, $replace); // replace or append to the handler stack
+$app->before($callable, $optional_callable); // prepend a handler to the stack
+$app->after($callable, $optional_callable); // append a handler to the stack
+$app->route($path, ...$handlers); // start a new route segment
+$app->routes(); // get the route collection
+$app->routes($routes, $replace); // replace or append to the route collection
+$app->context(); // get the current context
+$app->context($context); // append a new context
+$app->handle($request, $type, $catch); // implement HttpKernelInterface::handle
 ```
 
 ### Route
 
 ```php
-$route->route($path, ...$handlers);
-$route->path();
-$route->method($methods, ...$handlers);
-$route->get(...$handlers);
-$route->post(...$handlers);
-$route->put(...$handlers);
-$route->delete(...$handlers);
-$route->patch(...$handlers);
-$route->options(...$handlers);
-$route->head(...$handlers);
-$route->dump();
+$route->route($path, ...$handlers); // append a new route segment
+$route->method($methods, ...$handlers); // register method handler(s)
+$route->get(...$handlers); // register method handler(s) for GET
+$route->post(...$handlers); // register method handler(s) for POST
+$route->put(...$handlers); // register method handler(s) for PUT
+$route->delete(...$handlers); // register method handler(s) for DELETE
+$route->patch(...$handlers); // register method handler(s) for PATCH
+$route->options(...$handlers); // register method handler(s) for OPTIONS
+$route->head(...$handlers); // register method handler(s) for HEAD
+$route->dump(); // recursively dump all routes to an array
 ```
 
 ### Context
 
 ```php
-$context->request();
-$context->request($request);
-$context->response();
-$context->response($response);
-$context->response($content, $status, $headers);
-$context->error($exception);
-$context->error($message, $status, $headers, $code);
-$context->master();
-$context->map($params);
-$context->param($key);
-$context->param($key, $default);
-$context->append($output);
-$context->last();
+$context->request(); // get the Request object
+$context->request($request); // set the Request object
+$context->response(); // get the Response object
+$context->response($response); // set the Response object
+$context->response($content, $status, $headers); // create a new Response object
+$context->error($exception); // throw an exception
+$context->error($message, $status, $headers, $code); // create and throw an exception
+$context->master(); // check whether the current request is the master request
+$context->param($key); // get a route parameter
+$context->param($key, $default); // get a route parameter with fallback
+$context->params($params); // insert route parameters
+$context->params(); // get all route parameters
+$context->append($output); // append a handler return value
+$context->last(); // get the last handler return value
 ```
 
 License
@@ -300,6 +309,7 @@ This project was inspired by the following:
 * [Martini][8]
 * [Bullet][9]
 * [Slim][10]
+* [Silex][11]
 
 [1]: http://getcomposer.org
 [2]: http://pimple.sensiolabs.org
@@ -311,3 +321,4 @@ This project was inspired by the following:
 [8]: https://github.com/codegangsta/martini
 [9]: https://github.com/vlucas/bulletphp
 [10]: https://github.com/codeguy/Slim
+[11]: https://github.com/silexphp/Silex

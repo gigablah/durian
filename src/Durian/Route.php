@@ -11,36 +11,21 @@ class Route
 {
     private $path;
     private $handlers;
-    private $parent;
-    private $children;
     private $methods;
+    private $children;
 
     /**
      * Constructor.
      *
      * @param string $path     Path or pattern to match
      * @param array  $handlers Array of handlers to execute for the path segment
-     * @param Route  $parent   Parent route to prepend
      */
-    public function __construct($path, array $handlers = [], Route $parent = null)
+    public function __construct($path = '/', array $handlers = [])
     {
-        $this->path = sprintf('%s%s', $parent ? rtrim($parent->path(), '/') : '', $path);
+        $this->path = $path;
         $this->handlers = $handlers;
-        $this->parent = $parent;
-        $this->children = [];
         $this->methods = ['GET' => []];
-    }
-
-    /**
-     * Create a new Route.
-     *
-     * @param string $path     Path or pattern to match
-     * @param array  $handlers Array of handlers to execute for the path segment
-     * @param Route  $parent   Parent route to prepend
-     */
-    public static function create($path, array $handlers = [], Route $parent = null)
-    {
-        return new static($path, $handlers, $parent);
+        $this->children = [];
     }
 
     /**
@@ -68,16 +53,6 @@ class Route
     }
 
     /**
-     * Retrieve the route path.
-     *
-     * @return string The route path
-     */
-    public function path()
-    {
-        return $this->path;
-    }
-
-    /**
      * Create a new child route.
      *
      * @param string $path     Path or pattern to match
@@ -85,16 +60,17 @@ class Route
      *
      * @return Route The child route
      */
-    public function route($path, callable $handlers = null)
+    public function route($path, $handlers = null)
     {
         if (null === $handlers) {
-            $handlers = [function () {}];
+            $handlers = [];
         } else {
             $handlers = func_get_args();
             array_shift($handlers);
         }
 
-        $this->children[] = $route = Route::create($path, $handlers, $this);
+        $path = sprintf('%s%s', rtrim($this->path, '/'), $path);
+        $this->children[] = $route = new static($path, $handlers);
 
         return $route;
     }
@@ -107,21 +83,31 @@ class Route
      *
      * @return Route The current route
      */
-    public function method($method, array $handlers = [])
+    public function method($method, $handlers = null)
     {
+        if (null === $handlers) {
+            $handlers = [];
+        }
+
         if (!is_array($handlers)) {
             $handlers = func_get_args();
             array_shift($handlers);
         }
 
-        $methods = explode('|', strtoupper($method));
+        if ('*' === $method) {
+            $this->handlers = array_merge($this->handlers, $handlers);
+
+            return $this;
+        }
+
+        $methods = array_filter(explode('|', strtoupper($method)));
 
         foreach ($methods as $method) {
             if (!isset($this->methods[$method])) {
                 $this->methods[$method] = [];
             }
 
-            $this->methods[$method] += $handlers;
+            $this->methods[$method] = array_merge($this->methods[$method], $handlers);
         }
 
         return $this;

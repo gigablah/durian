@@ -11,7 +11,7 @@ use Symfony\Component\HttpFoundation\Response;
  *
  * @author Chris Heng <bigblah@gmail.com>
  */
-class AbstractMiddleware
+abstract class AbstractMiddleware
 {
     protected $app;
 
@@ -32,9 +32,9 @@ class AbstractMiddleware
      *
      * @return Request The current request
      */
-    public function request(Request $request = null)
+    protected function request(Request $request = null)
     {
-        return $this->app['context']->request($request);
+        return $this->app->context()->request($request);
     }
 
     /**
@@ -46,9 +46,34 @@ class AbstractMiddleware
      *
      * @return Response The current response
      */
-    public function response($response = null, $status = 200, array $headers = [])
+    protected function response($response = null, $status = 200, array $headers = [])
     {
-        return $this->app['context']->response($response, $status, $headers);
+        return $this->app->context()->response($response, $status, $headers);
+    }
+
+    /**
+     * Throws an exception. Automatically maps to Symfony2's HttpException.
+     *
+     * @param string|\Exception $exception Exception message or object
+     * @param integer           $status    HTTP status code
+     * @param array             $headers   Response headers to set
+     * @param mixed             $code      Exception code
+     *
+     * @throws \Exception
+     */
+    protected function error($exception = '', $status = 500, array $headers = [], $code = 0)
+    {
+        $this->app->context()->error($exception, $status, $headers, $code);
+    } // @codeCoverageIgnore
+
+    /**
+     * Check whether the current request is a master or subrequest.
+     *
+     * @return Boolean True if master request, false otherwise
+     */
+    protected function master()
+    {
+        return $this->app->context()->master();
     }
 
     /**
@@ -59,9 +84,31 @@ class AbstractMiddleware
      *
      * @return mixed The route parameter
      */
-    public function param($key, $default = null)
+    protected function param($key, $default = null)
     {
-        return $this->app['context']->param($key, $default);
+        return $this->app->context()->param($key, $default);
+    }
+
+    /**
+     * Insert or retrieve route parameters.
+     *
+     * @param array $params Route parameters to insert
+     *
+     * @return array Route parameters if no arguments passed
+     */
+    protected function params(array $params = null)
+    {
+        return $this->app->context()->params($params);
+    }
+
+    /**
+     * Insert handler output into the context.
+     *
+     * @param mixed $value Handler output
+     */
+    protected function append($output)
+    {
+        $this->app->context()->append($output);
     }
 
     /**
@@ -69,8 +116,8 @@ class AbstractMiddleware
      *
      * @return mixed The last handler output
      */
-    public function last()
+    protected function last()
     {
-        return $this->app['context']->last();
+        return $this->app->context()->last();
     }
 }

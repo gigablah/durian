@@ -36,11 +36,11 @@ class Handler
         if ($this->payload instanceof AbstractMiddleware) {
             $this->payload->bindTo($app);
         } elseif ($this->payload instanceof \Closure) {
-            $this->payload = $this->payload->bindTo($app['context']);
+            $this->payload = $this->payload->bindTo($app->context());
         }
 
         if (null !== $this->test && $this->test instanceof \Closure) {
-            $this->test = $this->test->bindTo($app['context']);
+            $this->test = $this->test->bindTo($app->context());
         }
     }
 

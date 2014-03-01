@@ -16,9 +16,10 @@ use Symfony\Component\HttpFoundation\Response;
 class Application extends \Pimple implements HttpKernelInterface
 {
     protected $handlers = [];
+    protected $routes = [];
     protected $context = [];
 
-    const VERSION = '0.0.1';
+    const VERSION = '0.0.3';
 
     /**
      * Constructor.
@@ -30,16 +31,26 @@ class Application extends \Pimple implements HttpKernelInterface
         parent::__construct();
 
         $this['debug'] = false;
-        $this['routes'] = [];
-
-        $this->handlers = [
-            new ResponseMiddleware(),
-            new RouterMiddleware()
-        ];
+        $this['durian.send_response'] = true;
+        $this['durian.bubble_errors'] = true;
+        $this['durian.handler_class'] = 'Durian\\Handler';
+        $this['durian.route_class'] = 'Durian\\Route';
+        $this['durian.context_class'] = 'Durian\\Context';
+        $this['durian.response_middleware'] = $this->share(function () {
+            return new ResponseMiddleware();
+        });
+        $this['durian.router_middleware'] = $this->share(function () {
+            return new RouterMiddleware();
+        });
 
         foreach ($values as $key => $value) {
             $this[$key] = $value;
         }
+
+        $this->handlers = [
+            $this['durian.response_middleware'],
+            $this['durian.router_middleware']
+        ];
     }
 
     /**
@@ -56,7 +67,32 @@ class Application extends \Pimple implements HttpKernelInterface
             $handler = $this->raw($handler);
         }
 
-        return $handler instanceof Handler ? $handler : new Handler($handler, $test);
+        return $handler instanceof $this['durian.handler_class']
+            ? $handler
+            : new $this['durian.handler_class']($handler, $test);
+    }
+
+    /**
+     * Retrieve or manipulate the middleware stack.
+     *
+     * @param array   $handlers An array of handlers
+     * @param Boolean $replace  Whether to replace the entire stack
+     *
+     * @return array The array of handlers if no arguments are passed
+     */
+    public function handlers(array $handlers = null, $replace = true)
+    {
+        if (null === $handlers) {
+            return $this->handlers;
+        }
+
+        if ($replace) {
+            $this->handlers = [];
+        }
+
+        foreach ($handlers as $handler) {
+            $this->handlers[] = $this->handler($handler);
+        }
     }
 
     /**
@@ -82,23 +118,6 @@ class Application extends \Pimple implements HttpKernelInterface
     }
 
     /**
-     * Manipulate the middleware stack.
-     *
-     * @param array   $handlers An array of handlers
-     * @param Boolean $replace  Whether to replace the entire stack
-     */
-    public function handlers(array $handlers, $replace = true)
-    {
-        if ($replace) {
-            $this->handlers = [];
-        }
-
-        foreach ($handlers as $handler) {
-            $this->handlers[] = $this->handler($handler);
-        }
-    }
-
-    /**
      * Associate a route segment with a collection of handlers.
      *
      * @param string $path     Path or pattern to match
@@ -115,10 +134,48 @@ class Application extends \Pimple implements HttpKernelInterface
             array_shift($handlers);
         }
 
-        $route = Route::create($path, $handlers);
-        $this['routes'] = array_merge($this['routes'], [$path => $route]);
+        $route = new $this['durian.route_class']($path, $handlers);
+
+        $this->routes([$path => $route], false);
 
         return $route;
+    }
+
+    /**
+     * Retrieve or manipulate the route collection.
+     *
+     * @param array   $routes  An array of routes
+     * @param Boolean $replace Whether to replace the entire collection
+     *
+     * @return array The array of routes if no arguments are passed
+     */
+    public function routes(array $routes = null, $replace = true)
+    {
+        if (null === $routes) {
+            return $this->routes;
+        }
+
+        if ($replace) {
+            $this->routes = [];
+        }
+
+        $this->routes = array_merge($this->routes, $routes);
+    }
+
+    /**
+     * Retrieve or append the current context.
+     *
+     * @param Context $context A new context
+     *
+     * @return Context The current context if no arguments are passed
+     */
+    public function context(Context $context = null)
+    {
+        if (null === $context) {
+            return count($this->context) ? end($this->context) : null;
+        }
+
+        $this->context[] = $context;
     }
 
     /**
@@ -143,9 +200,9 @@ class Application extends \Pimple implements HttpKernelInterface
             ? HttpKernelInterface::SUB_REQUEST
             : HttpKernelInterface::MASTER_REQUEST;
 
-        $response = $this->handle($request, $type, !$this['debug']);
+        $response = $this->handle($request, $type, $this['durian.bubble_errors']);
 
-        if (HttpKernelInterface::SUB_REQUEST === $type) {
+        if (!$this['durian.send_response'] || HttpKernelInterface::SUB_REQUEST === $type) {
             return $response;
         }
 
@@ -157,21 +214,21 @@ class Application extends \Pimple implements HttpKernelInterface
      */
     public function handle(Request $request, $type = HttpKernelInterface::MASTER_REQUEST, $catch = true)
     {
-        $this['context'] = new Context($type, $request);
-        array_push($this->context, $this['context']);
+        $this->context(new $this['durian.context_class']($request, $type));
 
+        $handlerClass = $this['durian.handler_class'];
         $generators = [];
 
         // Produces a generator that recursively iterates through the handler stack
-        $handlerCallback = function () {
+        $handlerCallback = function () use ($handlerClass) {
             foreach ($this->handlers as $handler) {
                 $result = (yield $handler);
 
-                if ($result instanceof Handler) {
+                if ($result instanceof $handlerClass) {
                     yield $result;
                 } elseif ($result instanceof \Generator) {
                     $handler = $result->current();
-                    while ($handler instanceof Handler) {
+                    while ($handler instanceof $handlerClass) {
                         yield $handler;
                         $result->next();
                         $handler = $result->current();
@@ -194,14 +251,14 @@ class Application extends \Pimple implements HttpKernelInterface
                     $result = $generator->current();
                     array_push($generators, $generator);
                     $handlerGenerator->send($generator);
-                } elseif ($result instanceof Handler) {
+                } elseif ($result instanceof $handlerClass) {
                     $handlerGenerator->send($result);
                 } else {
                     $handlerGenerator->next();
                 }
 
-                if (!$result instanceof Handler) {
-                    $this['context']->append($result);
+                if (!$result instanceof $handlerClass) {
+                    $this->context()->append($result);
                 }
             }
 
@@ -232,12 +289,15 @@ class Application extends \Pimple implements HttpKernelInterface
                     continue;
                 }
             }
+
+            if (!$caught) {
+                throw $exception;
+            }
         }
 
-        $response = $this['context']->response();
+        $response = $this->context()->response();
 
         array_pop($this->context);
-        $this['context'] = end($this->context);
 
         return $response;
     }
