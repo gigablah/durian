@@ -13,8 +13,6 @@ use Symfony\Component\HttpFoundation\Response;
  */
 trait ContextTrait
 {
-    protected $context;
-
     /**
      * Set or get the request for the current context.
      *
