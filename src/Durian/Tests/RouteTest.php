@@ -15,6 +15,14 @@ class RouteTest extends \PHPUnit_Framework_TestCase
     {
         $route = new Route();
 
+        $this->assertSame([], $route->dump());
+    }
+
+    public function testRootRoute()
+    {
+        $route = new Route();
+        $route->route('/');
+
         $this->assertSame(['/' => ['GET' => []]], $route->dump());
     }
 

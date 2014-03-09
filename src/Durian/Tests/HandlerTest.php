@@ -3,6 +3,7 @@
 namespace Durian\Tests;
 
 use Durian\Handler;
+use Durian\Middleware;
 use Symfony\Component\HttpFoundation\Request;
 
 /**
@@ -16,7 +17,19 @@ class HandlerTest extends \PHPUnit_Framework_TestCase
     {
         $handler = new Handler();
 
+        $this->assertSame([
+            'iterate' => false,
+            'catch_errors' => true,
+            'terminate_on_response' => true
+        ], $handler->options());
         $this->assertNull(call_user_func($handler));
+    }
+
+    public function testOptions()
+    {
+        $handler = new Handler(null, null, ['iterate' => true]);
+
+        $this->assertTrue($handler->options('iterate'));
     }
 
     public function testInvokeWithBooleanTest()
@@ -45,7 +58,24 @@ class HandlerTest extends \PHPUnit_Framework_TestCase
         $this->assertNull(call_user_func($handler));
     }
 
-    public function testBindToWithClosure()
+    public function testInvokeWithTerminatingResponseTest()
+    {
+        $handler = new Handler('foo', function () {
+            $this->response('bar');
+        });
+        $context = $this->getMock('Durian\\Context');
+        $context->expects($this->at(0))
+            ->method('response')
+            ->with($this->equalTo('bar'));
+        $context->expects($this->at(1))
+            ->method('response')
+            ->will($this->returnValue(true));
+        $handler->context($context);
+
+        $this->assertNull(call_user_func($handler));
+    }
+
+    public function testBindContextToClosure()
     {
         $handler = new Handler(function () {
             return $this->request();
@@ -60,25 +90,30 @@ class HandlerTest extends \PHPUnit_Framework_TestCase
         $context->expects($this->once())
             ->method('master')
             ->will($this->returnValue(true));
-        $app = $this->getMock('Durian\\Application');
-        $app->expects($this->any())
-            ->method('context')
-            ->will($this->returnValue($context));
+        $handler->context($context);
 
-        $handler->bindTo($app);
-
+        $this->assertSame($context, $handler->context());
         $this->assertSame($request, call_user_func($handler));
     }
 
-    public function testBindToWithMiddleware()
+    public function testBindContextToMiddleware()
     {
-        $middleware = $this->getMock('Durian\\Middleware\\AbstractMiddleware');
-        $middleware->expects($this->once())
-            ->method('bindTo')
-            ->with($this->isInstanceOf('Durian\\Application'));
-        $handler = new Handler($middleware);
-        $app = $this->getMock('Durian\\Application');
+        $middleware = new MockMiddleware();
+        $request = new Request();
+        $context = $this->getMock('Durian\\Context');
+        $context->expects($this->once())
+            ->method('request')
+            ->will($this->returnValue($request));
+        $middleware->context($context);
 
-        $handler->bindTo($app);
+        $this->assertSame($request, call_user_func($middleware));
+    }
+}
+
+class MockMiddleware extends Middleware
+{
+    public function run()
+    {
+        return $this->request();
     }
 }

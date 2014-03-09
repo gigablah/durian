@@ -16,9 +16,7 @@ class ApplicationTest extends \PHPUnit_Framework_TestCase
         $app = new Application();
 
         $this->assertSame($app['debug'], false);
-        $this->assertSame($app['durian.handler_class'], 'Durian\\Handler');
-        $this->assertSame($app['durian.route_class'], 'Durian\\Route');
-        $this->assertSame($app['durian.context_class'], 'Durian\\Context');
+        $this->assertSame($app['app.catch_errors'], true);
 
         $app = new Application([
             'debug' => true,
@@ -108,77 +106,24 @@ class ApplicationTest extends \PHPUnit_Framework_TestCase
         $app = new Application();
         $route = $app->route('/');
 
-        $this->assertInstanceOf($app['durian.route_class'], $route);
+        $this->assertInstanceOf('Durian\\Route', $route);
 
         $route = $app->route('/', function () {});
 
-        $this->assertInstanceOf($app['durian.route_class'], $route);
+        $this->assertInstanceOf('Durian\\Route', $route);
 
         $route = $app->route('/', function () {}, function () {});
 
-        $this->assertInstanceOf($app['durian.route_class'], $route);
-    }
-
-    public function testReplaceRoutes()
-    {
-        $app = new Application();
-        $route1 = $this->getMock('Durian\\Route');
-        $route2 = $this->getMock('Durian\\Route');
-        $app->routes([$route1]);
-
-        $this->assertSame([$route1], $app->routes());
-
-        $app->routes([$route2]);
-
-        $this->assertSame([$route2], $app->routes());
-    }
-
-    public function testAppendRoutes()
-    {
-        $app = new Application();
-        $route1 = $this->getMock('Durian\\Route');
-        $route2 = $this->getMock('Durian\\Route');
-        $app->routes([$route1]);
-        $app->routes([$route2], false);
-
-        $this->assertSame([$route1, $route2], $app->routes());
-    }
-
-    public function testContext()
-    {
-        $app = new Application();
-        $reflectionClass = new \ReflectionClass($app);
-        $contextProperty = $reflectionClass->getProperty('context');
-        $contextProperty->setAccessible(true);
-        $context1 = $this->getMock('Durian\\Context');
-        $contextProperty->setValue($app, [$context1]);
-
-        $this->assertSame($context1, $app->context());
-
-        $context2 = $this->getMock('Durian\\Context');
-        $contextProperty->setValue($app, [$context1, $context2]);
-
-        $this->assertSame($context2, $app->context());
+        $this->assertInstanceOf('Durian\\Route', $route);
     }
 
     public function testRunWithEmptyMiddleware()
     {
         $app = new Application();
         $app->handlers([]);
-        $app['durian.send_response'] = false;
         $result = $app->run();
 
         $this->assertNull($result);
-    }
-
-    public function testRunWithSubRequest()
-    {
-        $app = new Application();
-        $context = $this->getMock('Durian\\Context');
-        $app->context($context);
-        $result = $app->run();
-
-        $this->assertInstanceOf('Symfony\\Component\\HttpFoundation\\Response', $result);
     }
 
     public function testRunWithMethodAndPath()
@@ -197,7 +142,6 @@ class ApplicationTest extends \PHPUnit_Framework_TestCase
                 $probe->__invoke($this->request()->getPathInfo());
             })
         ]);
-        $app['durian.send_response'] = false;
 
         $app->run('FOO', '/bar');
     }
@@ -205,7 +149,6 @@ class ApplicationTest extends \PHPUnit_Framework_TestCase
     public function testRunWithDefaultMiddleware()
     {
         $app = new Application();
-        $app['durian.send_response'] = false;
         $result = $app->run();
 
         $this->assertInstanceOf('Symfony\\Component\\HttpFoundation\\Response', $result);
@@ -216,23 +159,25 @@ class ApplicationTest extends \PHPUnit_Framework_TestCase
         $app = new Application();
         $app->handlers([
             $app->handler(function () {
-                $this->response('');
+                $this->response('foo');
             })
         ]);
         $result = $app->run();
 
-        $this->assertNull($result);
+        $this->assertInstanceOf('Symfony\\Component\\HttpFoundation\\Response', $result);
+        $this->assertSame('foo', $result->getContent());
     }
 
     public function testRunWithGenerator()
     {
         $app = new Application();
+        $context = $app['app.context'];
         $probe = $this->getMock('Durian\\Handler');
         $probe->expects($this->at(0))
             ->method('__invoke');
         $probe->expects($this->at(1))
-            ->method('bindTo')
-            ->with($this->isInstanceOf('Durian\\Application'));
+            ->method('context')
+            ->with($this->isInstanceOf('Durian\\Context'));
         $probe->expects($this->at(2))
             ->method('__invoke');
         $callback = function () use ($probe) {
@@ -243,16 +188,15 @@ class ApplicationTest extends \PHPUnit_Framework_TestCase
         $generator = $callback();
         $handler1 = $this->getMock('Durian\\Handler');
         $handler1->expects($this->once())
-            ->method('bindTo')
-            ->with($this->isInstanceOf('Durian\\Application'));
+            ->method('context')
+            ->with($this->isInstanceOf('Durian\\Context'));
         $handler1->expects($this->once())
             ->method('__invoke')
             ->will($this->returnValue($generator));
-        $handler2 = function () use ($probe, $app) {
-            $probe->bindTo($app);
+        $handler2 = function () use ($probe, $context) {
+            $probe->context($context);
         };
         $app->handlers([$handler1, $handler2]);
-        $app['durian.send_response'] = false;
 
         $app->run();
     }
@@ -275,7 +219,6 @@ class ApplicationTest extends \PHPUnit_Framework_TestCase
                 });
             })
         ]);
-        $app['durian.send_response'] = false;
 
         $app->run();
     }
@@ -290,20 +233,14 @@ class ApplicationTest extends \PHPUnit_Framework_TestCase
         $probe->expects($this->at(1))
             ->method('__invoke')
             ->with($this->equalTo(2));
-        $probe->expects($this->at(2))
-            ->method('__invoke')
-            ->with($this->equalTo(3));
         $app->handlers([
             $app->handler(function () use ($probe, $app) {
                 $probe->__invoke(1);
-                foreach (range(2, 3) as $input) {
-                    yield $app->handler(function () use ($probe, $input) {
-                        $probe->__invoke($input);
-                    });
-                }
+                yield $app->handler(function () use ($probe) {
+                    $probe->__invoke(2);
+                });
             })
         ]);
-        $app['durian.send_response'] = false;
 
         $app->run();
     }
@@ -319,8 +256,7 @@ class ApplicationTest extends \PHPUnit_Framework_TestCase
                 throw new \RuntimeException();
             })
         ]);
-        $app['durian.bubble_errors'] = false;
-        $app['durian.send_response'] = false;
+        $app['app.catch_errors'] = false;
 
         $app->run();
     }
@@ -328,11 +264,12 @@ class ApplicationTest extends \PHPUnit_Framework_TestCase
     public function testRunWithExceptionHandling()
     {
         $app = new Application();
+        $context = $app['app.context'];
         $probe = $this->getMock('Durian\\Handler');
         $probe->expects($this->at(0))
             ->method('__invoke');
         $probe->expects($this->at(1))
-            ->method('bindTo')
+            ->method('context')
             ->will($this->throwException(new \Exception()));
         $probe->expects($this->at(2))
             ->method('__invoke')
@@ -366,11 +303,10 @@ class ApplicationTest extends \PHPUnit_Framework_TestCase
         $handler3->expects($this->once())
             ->method('__invoke')
             ->will($this->returnValue($generator3));
-        $handler4 = function () use ($probe, $app) {
-            $probe->bindTo($app);
+        $handler4 = function () use ($probe, $context) {
+            $probe->context($context);
         };
         $app->handlers([$handler1, $handler2, $handler3, $handler4]);
-        $app['durian.send_response'] = false;
 
         $app->run();
     }
@@ -381,9 +317,10 @@ class ApplicationTest extends \PHPUnit_Framework_TestCase
     public function testRunWithUncaughtException()
     {
         $app = new Application();
+        $context = $app['app.context'];
         $probe = $this->getMock('Durian\\Handler');
         $probe->expects($this->once())
-            ->method('bindTo')
+            ->method('context')
             ->will($this->throwException(new \LogicException()));
         $callback = function () use ($probe) {
             try {
@@ -396,11 +333,10 @@ class ApplicationTest extends \PHPUnit_Framework_TestCase
         $handler1->expects($this->once())
             ->method('__invoke')
             ->will($this->returnValue($generator));
-        $handler2 = function () use ($probe, $app) {
-            $probe->bindTo($app);
+        $handler2 = function () use ($probe, $context) {
+            $probe->context($context);
         };
         $app->handlers([$handler1, $handler2]);
-        $app['durian.send_response'] = false;
 
         $app->run();
     }

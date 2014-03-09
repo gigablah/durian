@@ -2,8 +2,6 @@
 
 namespace Durian;
 
-use Durian\Middleware\ResponseMiddleware;
-use Durian\Middleware\RouterMiddleware;
 use Symfony\Component\HttpKernel\HttpKernelInterface;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -15,11 +13,7 @@ use Symfony\Component\HttpFoundation\Response;
  */
 class Application extends \Pimple implements HttpKernelInterface
 {
-    protected $handlers = [];
-    protected $routes = [];
-    protected $context = [];
-
-    const VERSION = '0.0.3';
+    const VERSION = '0.1.0';
 
     /**
      * Constructor.
@@ -31,26 +25,33 @@ class Application extends \Pimple implements HttpKernelInterface
         parent::__construct();
 
         $this['debug'] = false;
-        $this['durian.send_response'] = true;
-        $this['durian.bubble_errors'] = true;
-        $this['durian.handler_class'] = 'Durian\\Handler';
-        $this['durian.route_class'] = 'Durian\\Route';
-        $this['durian.context_class'] = 'Durian\\Context';
-        $this['durian.response_middleware'] = $this->share(function () {
-            return new ResponseMiddleware();
+        $this['app.catch_errors'] = true;
+
+        $this['app.handler'] = $this->share(function ($app) {
+            $handler = new Handler(null, null, ['iterate' => true]);
+            $handler->handlers(array_map([$handler, 'handler'], $app['app.handlers']));
+
+            return $handler;
         });
-        $this['durian.router_middleware'] = $this->share(function () {
-            return new RouterMiddleware();
+
+        $this['app.handlers'] = $this->share(function ($app) {
+            return [
+                new Middleware\ResponseMiddleware($app),
+                new Middleware\RouterMiddleware($app)
+            ];
+        });
+
+        $this['app.context'] = $this->share(function ($app) {
+            return new ContextProxy();
+        });
+
+        $this['app.routes'] = $this->share(function ($app) {
+            return new Route();
         });
 
         foreach ($values as $key => $value) {
             $this[$key] = $value;
         }
-
-        $this->handlers = [
-            $this['durian.response_middleware'],
-            $this['durian.router_middleware']
-        ];
     }
 
     /**
@@ -67,9 +68,7 @@ class Application extends \Pimple implements HttpKernelInterface
             $handler = $this->raw($handler);
         }
 
-        return $handler instanceof $this['durian.handler_class']
-            ? $handler
-            : new $this['durian.handler_class']($handler, $test);
+        return $this['app.handler']->handler($handler, $test);
     }
 
     /**
@@ -82,17 +81,11 @@ class Application extends \Pimple implements HttpKernelInterface
      */
     public function handlers(array $handlers = null, $replace = true)
     {
-        if (null === $handlers) {
-            return $this->handlers;
+        if (null !== $handlers) {
+            $handlers = array_map([$this, 'handler'], $handlers);
         }
 
-        if ($replace) {
-            $this->handlers = [];
-        }
-
-        foreach ($handlers as $handler) {
-            $this->handlers[] = $this->handler($handler);
-        }
+        return $this['app.handler']->handlers($handlers, $replace);
     }
 
     /**
@@ -103,7 +96,7 @@ class Application extends \Pimple implements HttpKernelInterface
      */
     public function before($handler, $test = null)
     {
-        array_unshift($this->handlers, $this->handler($handler, $test));
+        $this['app.handler']->before($this->handler($handler), $test);
     }
 
     /**
@@ -114,7 +107,7 @@ class Application extends \Pimple implements HttpKernelInterface
      */
     public function after($handler, $test = null)
     {
-        array_push($this->handlers, $this->handler($handler, $test));
+        $this['app.handler']->after($this->handler($handler), $test);
     }
 
     /**
@@ -127,55 +120,7 @@ class Application extends \Pimple implements HttpKernelInterface
      */
     public function route($path, $handlers = null)
     {
-        if (null === $handlers) {
-            $handlers = [function () {}];
-        } else {
-            $handlers = func_get_args();
-            array_shift($handlers);
-        }
-
-        $route = new $this['durian.route_class']($path, $handlers);
-
-        $this->routes([$path => $route], false);
-
-        return $route;
-    }
-
-    /**
-     * Retrieve or manipulate the route collection.
-     *
-     * @param array   $routes  An array of routes
-     * @param Boolean $replace Whether to replace the entire collection
-     *
-     * @return array The array of routes if no arguments are passed
-     */
-    public function routes(array $routes = null, $replace = true)
-    {
-        if (null === $routes) {
-            return $this->routes;
-        }
-
-        if ($replace) {
-            $this->routes = [];
-        }
-
-        $this->routes = array_merge($this->routes, $routes);
-    }
-
-    /**
-     * Retrieve or append the current context.
-     *
-     * @param Context $context A new context
-     *
-     * @return Context The current context if no arguments are passed
-     */
-    public function context(Context $context = null)
-    {
-        if (null === $context) {
-            return count($this->context) ? end($this->context) : null;
-        }
-
-        $this->context[] = $context;
+        return call_user_func_array([$this['app.routes'], 'route'], func_get_args());
     }
 
     /**
@@ -196,17 +141,13 @@ class Application extends \Pimple implements HttpKernelInterface
             }
         }
 
-        $type = count($this->context)
+        $type = $this['app.context']->request()
             ? HttpKernelInterface::SUB_REQUEST
             : HttpKernelInterface::MASTER_REQUEST;
 
-        $response = $this->handle($request, $type, $this['durian.bubble_errors']);
+        $response = $this->handle($request, $type, $this['app.catch_errors']);
 
-        if (!$this['durian.send_response'] || HttpKernelInterface::SUB_REQUEST === $type) {
-            return $response;
-        }
-
-        $response->send();
+        return $response;
     }
 
     /**
@@ -214,90 +155,17 @@ class Application extends \Pimple implements HttpKernelInterface
      */
     public function handle(Request $request, $type = HttpKernelInterface::MASTER_REQUEST, $catch = true)
     {
-        $this->context(new $this['durian.context_class']($request, $type));
+        $this['app.context']->request($request, $type);
 
-        $handlerClass = $this['durian.handler_class'];
-        $generators = [];
-
-        // Produces a generator that recursively iterates through the handler stack
-        $handlerCallback = function () use ($handlerClass) {
-            foreach ($this->handlers as $handler) {
-                $result = (yield $handler);
-
-                if ($result instanceof $handlerClass) {
-                    yield $result;
-                } elseif ($result instanceof \Generator) {
-                    $handler = $result->current();
-                    while ($handler instanceof $handlerClass) {
-                        yield $handler;
-                        $result->next();
-                        $handler = $result->current();
-                    }
-                }
-            }
-        };
-
-        $handlerGenerator = $handlerCallback();
+        $this['app.handler']->options(['catch_errors' => $catch]);
+        $this['app.handler']->context($this['app.context']);
 
         try {
-            while ($handlerGenerator->valid()) {
-                $handler = $handlerGenerator->current();
-                $handler->bindTo($this);
-
-                $result = call_user_func($handler);
-
-                if ($result instanceof \Generator) {
-                    $generator = $result;
-                    $result = $generator->current();
-                    array_push($generators, $generator);
-                    $handlerGenerator->send($generator);
-                } elseif ($result instanceof $handlerClass) {
-                    $handlerGenerator->send($result);
-                } else {
-                    $handlerGenerator->next();
-                }
-
-                if (!$result instanceof $handlerClass) {
-                    $this->context()->append($result);
-                }
-            }
-
-            // Revisit all generators in reverse order
-            while (count($generators)) {
-                $generator = array_pop($generators);
-                $generator->next();
-            }
-        } catch (\Exception $exception) {
-            if (false === $catch) {
-                throw $exception;
-            }
-
-            $caught = false;
-
-            // Bubble the exception through all generators until handled
-            while (count($generators)) {
-                $generator = array_pop($generators);
-
-                try {
-                    if (!$caught) {
-                        $generator->throw($exception);
-                        $caught = true;
-                    } else {
-                        $generator->next();
-                    }
-                } catch (\Exception $exception) {
-                    continue;
-                }
-            }
-
-            if (!$caught) {
-                throw $exception;
-            }
+            call_user_func($this['app.handler']);
+        } finally {
+            $response = $this['app.context']->response();
+            $this['app.context']->clear();
         }
-
-        $response = $this->context()->response();
-
-        array_pop($this->context);
 
         return $response;
     }

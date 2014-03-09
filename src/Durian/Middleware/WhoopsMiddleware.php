@@ -3,6 +3,7 @@
 namespace Durian\Middleware;
 
 use Durian\Application;
+use Durian\Middleware;
 use Whoops\Run;
 use Whoops\Handler\PrettyPageHandler;
 
@@ -11,7 +12,7 @@ use Whoops\Handler\PrettyPageHandler;
  *
  * @author Chris Heng <bigblah@gmail.com>
  */
-class WhoopsMiddleware extends AbstractMiddleware
+class WhoopsMiddleware extends Middleware
 {
     /**
      * Register Whoops as an exception handler.
@@ -23,19 +24,25 @@ class WhoopsMiddleware extends AbstractMiddleware
         $app['whoops'] = new Run();
         $app['whoops']->pushHandler(new PrettyPageHandler());
         $app['whoops']->register();
+
+        parent::__construct($app);
     }
 
     /**
      * Intercept exceptions and print the output.
      */
-    public function __invoke()
+    public function run()
     {
         try {
-            yield;
+            yield null;
         } catch (\Exception $exception) {
             $this->app['whoops']->writeToOutput(false);
             $this->app['whoops']->allowQuit(false);
-            $this->response($this->app['whoops']->handleException($exception), 500);
+            if ($this->master()) {
+                $this->response($this->app['whoops']->handleException($exception), 500);
+            } else {
+                throw $exception;
+            }
         }
     }
 }
