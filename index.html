@@ -34,7 +34,9 @@
         <h1>
 <a name="durian" class="anchor" href="#durian"><span class="octicon octicon-link"></span></a>Durian</h1>
 
-<p>A pungent PHP 5.5 microframework based on generator-style middleware.</p>
+<p><a href="https://travis-ci.org/gigablah/durian"><img src="https://travis-ci.org/gigablah/durian.png?branch=master" alt="Build Status"></a> <a href="https://coveralls.io/r/gigablah/durian"><img src="https://coveralls.io/repos/gigablah/durian/badge.png" alt="Coverage Status"></a></p>
+
+<p>Durian is a PHP microframework that utilizes the newest features of PHP 5.5 together with lightweight library components to create an accessible, compact framework with performant routing and flexible generator-style middleware.</p>
 
 <h2>
 <a name="why" class="anchor" href="#why"><span class="octicon octicon-link"></span></a>Why?</h2>
@@ -48,7 +50,7 @@
 
 <div class="highlight highlight-json"><pre><span class="p">{</span>
     <span class="nt">"require"</span><span class="p">:</span> <span class="p">{</span>
-        <span class="nt">"gigablah/durian"</span><span class="p">:</span> <span class="s2">"~0.0.2"</span>
+        <span class="nt">"gigablah/durian"</span><span class="p">:</span> <span class="s2">"~0.1"</span>
     <span class="p">}</span>
 <span class="p">}</span>
 </pre></div>
@@ -58,15 +60,105 @@
 
 <div class="highlight highlight-php"><pre><span class="nv">$app</span> <span class="o">=</span> <span class="k">new</span> <span class="nx">Durian\Application</span><span class="p">();</span>
 <span class="nv">$app</span><span class="o">-&gt;</span><span class="na">route</span><span class="p">(</span><span class="s1">'/hello/{name}'</span><span class="p">,</span> <span class="k">function</span> <span class="p">()</span> <span class="p">{</span>
-    <span class="k">return</span> <span class="s1">'Hello '</span><span class="o">.</span><span class="nv">$this</span><span class="o">-&gt;</span><span class="na">param</span><span class="p">(</span><span class="s1">'name'</span><span class="p">);</span>
+    <span class="k">return</span> <span class="s1">'Hello '</span><span class="o">.</span><span class="nv">$this</span><span class="o">-&gt;</span><span class="na">params</span><span class="p">(</span><span class="s1">'name'</span><span class="p">);</span>
 <span class="p">});</span>
-<span class="nv">$app</span><span class="o">-&gt;</span><span class="na">run</span><span class="p">(</span><span class="nx">Symfony\Component\HttpFoundation\Request</span><span class="o">::</span><span class="na">createFromGlobals</span><span class="p">());</span>
+<span class="nv">$app</span><span class="o">-&gt;</span><span class="na">run</span><span class="p">()</span><span class="o">-&gt;</span><span class="na">send</span><span class="p">();</span>
 </pre></div>
 
-<p>Nothing special there. The <code>Application</code> container is based on <a href="http://pimple.sensiolabs.org">Pimple</a> and inherits its functions for defining lazy loading services. We also make use of the Symfony2 <code>Request</code> object so you have access to request headers, parameters and cookies. But since this is a PHP 5.5 microframework, it has been tailored to take advantage of shiny new <a href="http://www.php.net/manual/en/language.generators.overview.php">generator functions</a>. We'll explore that starting with <code>Application::route</code>.</p>
+<p>Nothing special there. The <code>Application</code> container is based on <a href="http://pimple.sensiolabs.org">Pimple</a> and inherits its functions for defining lazy loading services. We also make use of the Symfony2 <code>Request</code> object so you have access to request headers, parameters and cookies. But since this is a PHP 5.5 microframework, it has been tailored to take advantage of shiny new <a href="http://www.php.net/manual/en/language.generators.overview.php">generator functions</a>. We'll explore that starting with the core of our application: the handler stack.</p>
+
+<h2>
+<a name="handlers" class="anchor" href="#handlers"><span class="octicon octicon-link"></span></a>Handlers</h2>
+
+<p>When the application is run, the <code>Request</code> object is inserted into a <code>Context</code> object which is passed through a series of handler functions. They may read information from the request attributes, insert information into the context, create a <code>Response</code>, throw an exception and so on. Some of these functions may themselves comprise a series of functions, which are executed in the same manner as the main stack. If there are any generator functions encountered along the way, they are revisited in reverse order after the end of the stack is reached. This entire mechanism is encapsulated in the <code>Handler</code> class.</p>
+
+<p>All handlers boil down to an array of callables or generator functions with an optional test function. They can be defined using <code>Application::handler</code>:</p>
+
+<div class="highlight highlight-php"><pre><span class="nv">$responseTimeHandler</span> <span class="o">=</span> <span class="nv">$app</span><span class="o">-&gt;</span><span class="na">handler</span><span class="p">(</span><span class="k">function</span> <span class="p">()</span> <span class="p">{</span>
+    <span class="c1">// this executes before the rest of the stack</span>
+    <span class="nv">$time</span> <span class="o">=</span> <span class="nb">microtime</span><span class="p">(</span><span class="k">true</span><span class="p">);</span>
+    <span class="nx">yield</span><span class="p">;</span>
+    <span class="c1">// this executes after the rest of the stack</span>
+    <span class="nv">$time</span> <span class="o">=</span> <span class="nb">microtime</span><span class="p">(</span><span class="k">true</span><span class="p">)</span> <span class="o">-</span> <span class="nv">$time</span><span class="p">;</span>
+    <span class="nv">$this</span><span class="o">-&gt;</span><span class="na">response</span><span class="p">()</span><span class="o">-&gt;</span><span class="na">headers</span><span class="o">-&gt;</span><span class="na">set</span><span class="p">(</span><span class="s1">'X-Response-Time'</span><span class="p">,</span> <span class="nv">$time</span><span class="p">);</span>
+<span class="p">},</span> <span class="k">function</span> <span class="p">()</span> <span class="k">use</span> <span class="p">(</span><span class="nv">$app</span><span class="p">)</span> <span class="p">{</span>
+    <span class="c1">// only execute for the master request in the debug environment</span>
+    <span class="k">return</span> <span class="nv">$this</span><span class="o">-&gt;</span><span class="na">master</span><span class="p">()</span> <span class="o">&amp;&amp;</span> <span class="nv">$app</span><span class="p">[</span><span class="s1">'debug'</span><span class="p">];</span>
+<span class="p">});</span>
+</pre></div>
+
+<p>This returns a <code>Handler</code> object which can now be added to the front or back of the middleware stack:</p>
+
+<div class="highlight highlight-php"><pre><span class="nv">$app</span><span class="o">-&gt;</span><span class="na">before</span><span class="p">(</span><span class="nv">$responseTimeHandler</span><span class="p">);</span>
+<span class="nv">$app</span><span class="o">-&gt;</span><span class="na">after</span><span class="p">(</span><span class="nv">$someOtherHandler</span><span class="p">);</span>
+</pre></div>
+
+<p>You can modify the entire stack with <code>Application::handlers</code>. The second parameter determines whether to replace the whole stack (true by default).</p>
+
+<div class="highlight highlight-php"><pre><span class="nv">$app</span><span class="o">-&gt;</span><span class="na">handlers</span><span class="p">([</span>
+    <span class="nv">$responseTimeHandler</span><span class="p">,</span>
+    <span class="k">new</span> <span class="nx">Durian\Middleware\RouterMiddleware</span><span class="p">(</span><span class="nv">$app</span><span class="p">)</span>
+<span class="p">],</span> <span class="k">true</span><span class="p">);</span>
+</pre></div>
+
+<p>Each handler can itself be a stack of handlers! You can insert more handlers into a particular handler like you would with the main application. You may think of them as events; each <code>Handler</code> that contains a stack (as opposed to a single function) iterates through all its registered functions (listeners) independently, eventually passing the output to the main application stack. The main stack itself is registered in the container as <code>$app['app.handler']</code>.</p>
+
+<p>Normally, a stack will stop iterating once a response is found in the context. To change this behaviour, you can set the <code>terminate_on_response</code> option to false:</p>
+
+<div class="highlight highlight-php"><pre><span class="nv">$app</span><span class="p">[</span><span class="s1">'app.handler'</span><span class="p">]</span><span class="o">-&gt;</span><span class="na">options</span><span class="p">([</span><span class="s1">'terminate_on_response'</span> <span class="o">=&gt;</span> <span class="k">false</span><span class="p">]);</span>
+</pre></div>
+
+<h3>
+<a name="context" class="anchor" href="#context"><span class="octicon octicon-link"></span></a>Context</h3>
+
+<p>See the lavish use of <code>$this</code> in the examples above? That's made possible by the automatic binding of each closure or generator to the <code>Context</code> object. Each time the application handles a request or subrequest, a new context is pushed onto the stack. Handlers and middlewares receive a <code>ContextProxy</code> which saves them the trouble of juggling between different context objects.</p>
+
+<p>The context is a simple container for the <code>Request</code> and <code>Response</code> objects. It also holds the route parameters and the return values from each handler.</p>
+
+<div class="highlight highlight-php"><pre><span class="nv">$app</span><span class="o">-&gt;</span><span class="na">route</span><span class="p">(</span><span class="s1">'/hello/{name}'</span><span class="p">,</span> <span class="k">function</span> <span class="p">()</span> <span class="p">{</span>
+    <span class="k">return</span> <span class="nv">$this</span><span class="o">-&gt;</span><span class="na">params</span><span class="p">(</span><span class="s1">'name'</span><span class="p">);</span>
+<span class="p">})</span><span class="o">-&gt;</span><span class="na">get</span><span class="p">(</span><span class="k">function</span> <span class="p">()</span> <span class="p">{</span>
+    <span class="nv">$name</span> <span class="o">=</span> <span class="nv">$this</span><span class="o">-&gt;</span><span class="na">last</span><span class="p">();</span>
+    <span class="nv">$request</span> <span class="o">=</span> <span class="nv">$this</span><span class="o">-&gt;</span><span class="na">request</span><span class="p">();</span>
+    <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="nv">$this</span><span class="o">-&gt;</span><span class="na">response</span><span class="p">())</span> <span class="p">{</span>
+        <span class="nv">$this</span><span class="o">-&gt;</span><span class="na">response</span><span class="p">(</span><span class="s2">"Hello </span><span class="si">$name</span><span class="s2">"</span><span class="p">);</span>
+    <span class="p">}</span>
+<span class="p">});</span>
+</pre></div>
+
+<p><code>Context::last</code> holds the return (or yielded) value from the previous handler. This is one way to pass information downstream other than using the application container or request attributes.</p>
+
+<h3>
+<a name="middleware" class="anchor" href="#middleware"><span class="octicon octicon-link"></span></a>Middleware</h3>
+
+<p>Middlewares are simply handler functions defined as concrete classes by extending <code>Middleware</code>. The logic goes in <code>Middleware::run</code>. Middlewares have access to all context methods, so the syntax is essentially unchanged:</p>
+
+<div class="highlight highlight-php"><pre><span class="k">class</span> <span class="nc">ResponseTimeMiddleware</span> <span class="k">extends</span> <span class="nx">Durian\Middleware</span>
+<span class="p">{</span>
+    <span class="k">public</span> <span class="k">function</span> <span class="nf">run</span><span class="p">()</span>
+    <span class="p">{</span>
+        <span class="nv">$time</span> <span class="o">=</span> <span class="nb">microtime</span><span class="p">(</span><span class="k">true</span><span class="p">);</span>
+        <span class="nx">yield</span><span class="p">;</span>
+        <span class="nv">$time</span> <span class="o">=</span> <span class="nb">microtime</span><span class="p">(</span><span class="k">true</span><span class="p">)</span> <span class="o">-</span> <span class="nv">$time</span><span class="p">;</span>
+        <span class="nv">$this</span><span class="o">-&gt;</span><span class="na">response</span><span class="p">()</span><span class="o">-&gt;</span><span class="na">headers</span><span class="o">-&gt;</span><span class="na">set</span><span class="p">(</span><span class="s1">'X-Response-Time'</span><span class="p">,</span> <span class="nv">$time</span><span class="p">);</span>
+    <span class="p">}</span>
+<span class="p">}</span>
+
+<span class="c1">// Middlewares accept the application container in the constructor</span>
+<span class="nv">$app</span><span class="o">-&gt;</span><span class="na">before</span><span class="p">(</span><span class="k">new</span> <span class="nx">ResponseTimeMiddleware</span><span class="p">(</span><span class="nv">$app</span><span class="p">));</span>
+</pre></div>
+
+<h3>
+<a name="handler-injection" class="anchor" href="#handler-injection"><span class="octicon octicon-link"></span></a>Handler Injection</h3>
+
+<p>If a handler function returns another <code>Handler</code> or generator function, it will be inserted into the current position of the execution stack.</p>
+
+<p>In essence, the handler stack is recursively iterated over as a multidimensional array.</p>
 
 <h2>
 <a name="routing" class="anchor" href="#routing"><span class="octicon octicon-link"></span></a>Routing</h2>
+
+<p>Instead of the hierarchical routing syntax found in some other microframeworks, we use method chaining. The <code>yield</code> keyword allows us to pass execution to the next matching segment. Upon reaching the end of the chain, the execution flow is passed back to all generators in reverse order. Therefore, code before and after a <code>yield</code> statement will "wrap" subsequent route handlers:</p>
 
 <div class="highlight highlight-php"><pre><span class="nv">$app</span><span class="p">[</span><span class="s1">'awesome_library'</span><span class="p">]</span> <span class="o">=</span> <span class="nv">$app</span><span class="o">-&gt;</span><span class="na">share</span><span class="p">(</span><span class="k">function</span> <span class="p">(</span><span class="nv">$app</span><span class="p">)</span> <span class="p">{</span>
     <span class="k">return</span> <span class="k">new</span> <span class="nx">MyAwesomeLibrary</span><span class="p">();</span>
@@ -74,18 +166,16 @@
 
 <span class="nv">$app</span><span class="o">-&gt;</span><span class="na">route</span><span class="p">(</span><span class="s1">'/hello'</span><span class="p">,</span> <span class="k">function</span> <span class="p">()</span> <span class="k">use</span> <span class="p">(</span><span class="nv">$app</span><span class="p">)</span> <span class="p">{</span>
     <span class="nv">$app</span><span class="p">[</span><span class="s1">'awesome_library'</span><span class="p">]</span><span class="o">-&gt;</span><span class="na">performExpensiveOperation</span><span class="p">();</span>
-    <span class="nx">yield</span> <span class="s1">'Hello '</span><span class="p">;</span>
+    <span class="nx">yield</span> <span class="s1">'Hello'</span><span class="p">;</span>
     <span class="nv">$app</span><span class="p">[</span><span class="s1">'awesome_library'</span><span class="p">]</span><span class="o">-&gt;</span><span class="na">performCleanUp</span><span class="p">();</span>
 <span class="p">})</span><span class="o">-&gt;</span><span class="na">route</span><span class="p">(</span><span class="s1">'/{name}'</span><span class="p">,</span> <span class="k">function</span> <span class="p">()</span> <span class="p">{</span>
-    <span class="k">return</span> <span class="nv">$this</span><span class="o">-&gt;</span><span class="na">last</span><span class="p">()</span><span class="o">.</span><span class="nv">$this</span><span class="o">-&gt;</span><span class="na">param</span><span class="p">(</span><span class="s1">'name'</span><span class="p">);</span>
+    <span class="k">return</span> <span class="nv">$this</span><span class="o">-&gt;</span><span class="na">last</span><span class="p">()</span><span class="o">.</span><span class="s1">' '</span><span class="o">.</span><span class="nv">$this</span><span class="o">-&gt;</span><span class="na">params</span><span class="p">(</span><span class="s1">'name'</span><span class="p">);</span>
 <span class="p">})</span><span class="o">-&gt;</span><span class="na">get</span><span class="p">(</span><span class="k">function</span> <span class="p">()</span> <span class="p">{</span>
     <span class="k">return</span> <span class="p">[</span><span class="s1">'method'</span> <span class="o">=&gt;</span> <span class="s1">'GET'</span><span class="p">,</span> <span class="s1">'message'</span> <span class="o">=&gt;</span> <span class="nv">$this</span><span class="o">-&gt;</span><span class="na">last</span><span class="p">()];</span>
 <span class="p">})</span><span class="o">-&gt;</span><span class="na">post</span><span class="p">(</span><span class="k">function</span> <span class="p">()</span> <span class="p">{</span>
     <span class="k">return</span> <span class="p">[</span><span class="s1">'method'</span> <span class="o">=&gt;</span> <span class="s1">'POST'</span><span class="p">,</span> <span class="s1">'message'</span> <span class="o">=&gt;</span> <span class="nv">$this</span><span class="o">-&gt;</span><span class="na">last</span><span class="p">()];</span>
 <span class="p">});</span>
 </pre></div>
-
-<p>Instead of the hierarchical routing syntax found in some other microframeworks, we use method chaining. The <code>yield</code> keyword allows us to pass execution to the next matching segment. Upon reaching the end of the chain, the execution flow is passed back to all generators in reverse order. Therefore, code before and after a <code>yield</code> statement will essentially "wrap" subsequent route handlers.</p>
 
 <p>Why method chaining? The simple reason is that embedding the next route or method segment inside the route handler function forces us to execute the handler first before proceeding, thus potentially incurring expensive initialization code even if the request results in an error. Here, we stack the handler functions as each segment matches, and execute all of them in one go only if the route and method match is successful.</p>
 
@@ -100,7 +190,7 @@
 <span class="p">};</span>
 
 <span class="nv">$app</span><span class="o">-&gt;</span><span class="na">route</span><span class="p">(</span><span class="s1">'/hello'</span><span class="p">,</span> <span class="nv">$expensiveOperation</span><span class="p">,</span> <span class="k">function</span> <span class="p">()</span> <span class="p">{</span>
-    <span class="k">return</span> <span class="s1">'Hello '</span><span class="p">;</span>
+    <span class="k">return</span> <span class="s1">'Hello'</span><span class="p">;</span>
 <span class="p">})</span><span class="o">-&gt;</span><span class="na">route</span><span class="p">(</span><span class="o">...</span><span class="p">);</span>
 </pre></div>
 
@@ -116,10 +206,13 @@
 <span class="nv">$app</span><span class="o">-&gt;</span><span class="na">route</span><span class="p">(</span><span class="s1">'/users/{name}/friends'</span><span class="p">)</span><span class="o">-&gt;</span><span class="na">method</span><span class="p">(</span><span class="s1">'GET|POST'</span><span class="p">);</span>
 </pre></div>
 
-<p>Return values are automatically converted to Symfony2 <code>Response</code> objects. Arrays will result in a <code>JsonResponse</code>. You may also manually craft a response:</p>
+<h3>
+<a name="responsemiddleware" class="anchor" href="#responsemiddleware"><span class="octicon octicon-link"></span></a>ResponseMiddleware</h3>
+
+<p><code>ResponseMiddleware</code> takes care of converting return values to Symfony2 <code>Response</code> objects. Arrays will result in a <code>JsonResponse</code>. You may also manually craft a response:</p>
 
 <div class="highlight highlight-php"><pre><span class="nv">$app</span><span class="o">-&gt;</span><span class="na">route</span><span class="p">(</span><span class="s1">'/tea'</span><span class="p">,</span> <span class="k">function</span> <span class="p">()</span> <span class="k">use</span> <span class="p">(</span><span class="nv">$app</span><span class="p">)</span> <span class="p">{</span>
-    <span class="nv">$this</span><span class="o">-&gt;</span><span class="na">response</span><span class="p">(</span><span class="s2">"I'm a teapot"</span><span class="p">,</span> <span class="mi">418</span><span class="p">);</span>
+    <span class="nv">$this</span><span class="o">-&gt;</span><span class="na">response</span><span class="p">(</span><span class="s1">'I\'m a teapot'</span><span class="p">,</span> <span class="mi">418</span><span class="p">);</span>
 <span class="p">});</span>
 </pre></div>
 
@@ -131,10 +224,20 @@
 <span class="p">});</span>
 </pre></div>
 
+<p>Returning a HTTP status code also works:</p>
+
+<div class="highlight highlight-php"><pre><span class="nv">$app</span><span class="o">-&gt;</span><span class="na">route</span><span class="p">(</span><span class="s1">'/fail'</span><span class="p">,</span> <span class="k">function</span> <span class="p">()</span> <span class="p">{</span>
+    <span class="k">return</span> <span class="mi">500</span><span class="p">;</span>
+<span class="p">});</span>
+</pre></div>
+
+<h3>
+<a name="subrequests" class="anchor" href="#subrequests"><span class="octicon octicon-link"></span></a>Subrequests</h3>
+
 <p>Subrequests are performed by calling <code>Application::run</code>:</p>
 
 <div class="highlight highlight-php"><pre><span class="nv">$app</span><span class="o">-&gt;</span><span class="na">route</span><span class="p">(</span><span class="s1">'/song/{id:[0-9]+}'</span><span class="p">,</span> <span class="k">function</span> <span class="p">()</span> <span class="k">use</span> <span class="p">(</span><span class="nv">$app</span><span class="p">)</span> <span class="p">{</span>
-    <span class="nv">$id</span> <span class="o">=</span> <span class="nv">$this</span><span class="o">-&gt;</span><span class="na">param</span><span class="p">(</span><span class="s1">'id'</span><span class="p">);</span>
+    <span class="nv">$id</span> <span class="o">=</span> <span class="nv">$this</span><span class="o">-&gt;</span><span class="na">params</span><span class="p">(</span><span class="s1">'id'</span><span class="p">);</span>
     <span class="k">return</span> <span class="p">[</span>
         <span class="s1">'id'</span> <span class="o">=&gt;</span> <span class="nv">$id</span><span class="p">,</span>
         <span class="s1">'artist'</span> <span class="o">=&gt;</span> <span class="nv">$app</span><span class="o">-&gt;</span><span class="na">run</span><span class="p">(</span><span class="s1">'GET'</span><span class="p">,</span> <span class="s2">"/artists-by-song/</span><span class="si">$id</span><span class="s2">"</span><span class="p">)</span><span class="o">-&gt;</span><span class="na">getContent</span><span class="p">()</span>
@@ -142,64 +245,9 @@
 <span class="p">});</span>
 </pre></div>
 
-<h2>
-<a name="context" class="anchor" href="#context"><span class="octicon octicon-link"></span></a>Context</h2>
+<p>During a subrequest, <code>$this-&gt;master()</code> will return false.</p>
 
-<p>See the lavish use of <code>$this</code> in the examples above? That's made possible by the automatic binding of each closure or generator to the <code>Context</code> object. Each time the application handles a request or subrequest, a new context is pushed onto the stack.</p>
-
-<p>The context is a simple container for the <code>Request</code> and <code>Response</code> objects. It also holds the route parameters and the return values from each handler.</p>
-
-<div class="highlight highlight-php"><pre><span class="nv">$app</span><span class="o">-&gt;</span><span class="na">route</span><span class="p">(</span><span class="s1">'/hello/{name}'</span><span class="p">,</span> <span class="k">function</span> <span class="p">()</span> <span class="p">{</span>
-    <span class="k">return</span> <span class="nv">$this</span><span class="o">-&gt;</span><span class="na">param</span><span class="p">(</span><span class="s1">'name'</span><span class="p">);</span>
-<span class="p">})</span><span class="o">-&gt;</span><span class="na">get</span><span class="p">(</span><span class="k">function</span> <span class="p">()</span> <span class="p">{</span>
-    <span class="nv">$name</span> <span class="o">=</span> <span class="nv">$this</span><span class="o">-&gt;</span><span class="na">last</span><span class="p">();</span>
-    <span class="nv">$request</span> <span class="o">=</span> <span class="nv">$this</span><span class="o">-&gt;</span><span class="na">request</span><span class="p">();</span>
-    <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="nv">$this</span><span class="o">-&gt;</span><span class="na">response</span><span class="p">())</span> <span class="p">{</span>
-        <span class="nv">$this</span><span class="o">-&gt;</span><span class="na">response</span><span class="p">(</span><span class="s2">"Hello </span><span class="si">$name</span><span class="s2">"</span><span class="p">);</span>
-    <span class="p">}</span>
-<span class="p">});</span>
-</pre></div>
-
-<p><code>Context::last</code> holds the return (or yielded) value from the previous handler. This is a way to pass information downstream other than using the application container or request attributes.</p>
-
-<h2>
-<a name="middleware" class="anchor" href="#middleware"><span class="octicon octicon-link"></span></a>Middleware</h2>
-
-<p>The pattern of generator stacking applies to the entire application flow, not just routing. All middlewares boil down to a callable or generator function with an optional test function. They can be defined using <code>Application::handler</code>:</p>
-
-<div class="highlight highlight-php"><pre><span class="nv">$responseTimeMiddleware</span> <span class="o">=</span> <span class="nv">$app</span><span class="o">-&gt;</span><span class="na">handler</span><span class="p">(</span><span class="k">function</span> <span class="p">()</span> <span class="p">{</span>
-    <span class="nv">$time</span> <span class="o">=</span> <span class="nb">microtime</span><span class="p">(</span><span class="k">true</span><span class="p">);</span>
-    <span class="nx">yield</span><span class="p">;</span>
-    <span class="nv">$this</span><span class="o">-&gt;</span><span class="na">response</span><span class="p">()</span><span class="o">-&gt;</span><span class="na">headers</span><span class="o">-&gt;</span><span class="na">set</span><span class="p">(</span><span class="s1">'X-Response-Time'</span><span class="p">,</span> <span class="nb">sprintf</span><span class="p">(</span><span class="s1">'%fms'</span><span class="p">,</span> <span class="nb">microtime</span><span class="p">(</span><span class="k">true</span><span class="p">)</span> <span class="o">-</span> <span class="nv">$time</span><span class="p">));</span>
-<span class="p">},</span> <span class="k">function</span> <span class="p">()</span> <span class="k">use</span> <span class="p">(</span><span class="nv">$app</span><span class="p">)</span> <span class="p">{</span>
-    <span class="k">return</span> <span class="nv">$this</span><span class="o">-&gt;</span><span class="na">master</span><span class="p">()</span> <span class="o">&amp;&amp;</span> <span class="nv">$app</span><span class="p">[</span><span class="s1">'debug'</span><span class="p">];</span>
-<span class="p">});</span>
-</pre></div>
-
-<p>This returns a <code>Handler</code> object which can now be added to the front or back of the middleware stack:</p>
-
-<div class="highlight highlight-php"><pre><span class="nv">$app</span><span class="o">-&gt;</span><span class="na">before</span><span class="p">(</span><span class="nv">$responseTimeMiddleware</span><span class="p">);</span>
-<span class="nv">$app</span><span class="o">-&gt;</span><span class="na">after</span><span class="p">(</span><span class="nv">$someOtherMiddleware</span><span class="p">);</span>
-</pre></div>
-
-<p>You can modify the entire stack with <code>Application::handlers</code>. The second parameter determines whether to replace the whole stack (true by default).</p>
-
-<div class="highlight highlight-php"><pre><span class="nv">$app</span><span class="o">-&gt;</span><span class="na">handlers</span><span class="p">([</span>
-    <span class="nv">$responseTimeMiddleware</span><span class="p">,</span>
-    <span class="k">new</span> <span class="nx">Durian\Middleware\RouterMiddleware</span><span class="p">()</span>
-<span class="p">]);</span>
-</pre></div>
-
-<p>Middleware can also be defined as concrete classes by extending <code>AbstractMiddleware</code>.</p>
-
-<h2>
-<a name="handler-injection" class="anchor" href="#handler-injection"><span class="octicon octicon-link"></span></a>Handler Injection</h2>
-
-<p>If a handler function returns another <code>Handler</code>, it will be inserted into the current position of the execution stack.</p>
-
-<p>Similarly, if a handler function produces a generator that yields handlers, the whole collection will be inserted into the stack. This is exactly how the router middleware works.</p>
-
-<p>In essence, the handler stack is recursively iterated over as a multidimensional array.</p>
+<p>Thrown exceptions from subrequests are not converted to <code>Response</code> objects; they should be handled in the master request.</p>
 
 <h2>
 <a name="exception-handling" class="anchor" href="#exception-handling"><span class="octicon octicon-link"></span></a>Exception Handling</h2>
@@ -212,15 +260,10 @@
     <span class="k">try</span> <span class="p">{</span>
         <span class="nx">yield</span><span class="p">;</span>
     <span class="p">}</span> <span class="k">catch</span> <span class="p">(</span><span class="nx">\Exception</span> <span class="nv">$exception</span><span class="p">)</span> <span class="p">{</span>
-        <span class="k">if</span> <span class="p">(</span><span class="nv">$exception</span> <span class="nx">instanceof</span> <span class="nx">HttpException</span><span class="p">)</span> <span class="p">{</span>
-            <span class="nv">$this</span><span class="o">-&gt;</span><span class="na">response</span><span class="p">(</span>
-                <span class="nv">$exception</span><span class="o">-&gt;</span><span class="na">getMessage</span><span class="p">(),</span>
-                <span class="nv">$exception</span><span class="o">-&gt;</span><span class="na">getStatusCode</span><span class="p">(),</span>
-                <span class="nv">$exception</span><span class="o">-&gt;</span><span class="na">getHeaders</span><span class="p">()</span>
-            <span class="p">);</span>
-        <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
-            <span class="nv">$this</span><span class="o">-&gt;</span><span class="na">response</span><span class="p">(</span><span class="nv">$exception</span><span class="o">-&gt;</span><span class="na">getMessage</span><span class="p">(),</span> <span class="mi">500</span><span class="p">);</span>
+        <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="nv">$this</span><span class="o">-&gt;</span><span class="na">master</span><span class="p">())</span> <span class="p">{</span>
+            <span class="k">throw</span> <span class="nv">$exception</span><span class="p">;</span>
         <span class="p">}</span>
+        <span class="nv">$this</span><span class="o">-&gt;</span><span class="na">response</span><span class="p">(</span><span class="nv">$exception</span><span class="o">-&gt;</span><span class="na">getMessage</span><span class="p">(),</span> <span class="mi">500</span><span class="p">);</span>
     <span class="p">}</span>
 <span class="p">});</span>
 </pre></div>
@@ -229,7 +272,7 @@
 
 <div class="highlight highlight-json"><pre><span class="p">{</span>
     <span class="nt">"require"</span><span class="p">:</span> <span class="p">{</span>
-        <span class="nt">"gigablah/durian"</span><span class="p">:</span> <span class="s2">"~0.0.2"</span><span class="p">,</span>
+        <span class="nt">"gigablah/durian"</span><span class="p">:</span> <span class="s2">"~0.1"</span><span class="p">,</span>
         <span class="nt">"filp/whoops"</span><span class="p">:</span> <span class="s2">"~1.0"</span>
     <span class="p">}</span>
 <span class="p">}</span>
@@ -237,10 +280,25 @@
 
 <p>Then, register <code>WhoopsMiddleware</code> as the first handler in your application:</p>
 
+<div class="highlight highlight-php"><pre><span class="nv">$app</span><span class="o">-&gt;</span><span class="na">before</span><span class="p">(</span><span class="k">new</span> <span class="nx">Durian\Middleware\WhoopsMiddleware</span><span class="p">(</span><span class="nv">$app</span><span class="p">));</span>
+</pre></div>
+
+<p>You may also register it for only a specific sub-stack, like the example below:</p>
+
 <div class="highlight highlight-php"><pre><span class="nv">$app</span><span class="o">-&gt;</span><span class="na">handlers</span><span class="p">([</span>
-    <span class="k">new</span> <span class="nx">Durian\Middleware\WhoopsMiddleware</span><span class="p">()</span>
-    <span class="k">new</span> <span class="nx">Durian\Middleware\RouterMiddleware</span><span class="p">()</span>
+    <span class="k">new</span> <span class="nx">Durian\Middleware\ResponseMiddleware</span><span class="p">(</span><span class="nv">$app</span><span class="p">),</span>
+    <span class="k">new</span> <span class="nx">Durian\Handler</span><span class="p">([</span>
+        <span class="k">new</span> <span class="nx">Durian\Middleware\WhoopsMiddleware</span><span class="p">(</span><span class="nv">$app</span><span class="p">),</span>
+        <span class="k">new</span> <span class="nx">Durian\Middleware\RouterMiddleware</span><span class="p">(</span><span class="nv">$app</span><span class="p">)</span>
+    <span class="p">])</span>
 <span class="p">]);</span>
+</pre></div>
+
+<p>Just to drive home the point, you may also register it only for a specific route:</p>
+
+<div class="highlight highlight-php"><pre><span class="nv">$app</span><span class="o">-&gt;</span><span class="na">route</span><span class="p">(</span><span class="s1">'/foo'</span><span class="p">,</span> <span class="k">new</span> <span class="nx">Durian\Middleware\WhoopsMiddleware</span><span class="p">(</span><span class="nv">$app</span><span class="p">),</span> <span class="k">function</span> <span class="p">()</span> <span class="p">{</span>
+    <span class="k">throw</span> <span class="k">new</span> <span class="nx">\Exception</span><span class="p">(</span><span class="s1">'bar'</span><span class="p">);</span>
+<span class="p">});</span>
 </pre></div>
 
 <h2>
@@ -261,47 +319,65 @@
 <h3>
 <a name="application" class="anchor" href="#application"><span class="octicon octicon-link"></span></a>Application</h3>
 
-<div class="highlight highlight-php"><pre><span class="nv">$app</span><span class="o">-&gt;</span><span class="na">run</span><span class="p">(</span><span class="nv">$request_or_method</span><span class="p">,</span> <span class="nv">$path</span><span class="p">);</span>
-<span class="nv">$app</span><span class="o">-&gt;</span><span class="na">route</span><span class="p">(</span><span class="nv">$path</span><span class="p">,</span> <span class="o">...</span><span class="nv">$handlers</span><span class="p">);</span>
-<span class="nv">$app</span><span class="o">-&gt;</span><span class="na">handler</span><span class="p">(</span><span class="nv">$callable</span><span class="p">,</span> <span class="nv">$optional_callable</span><span class="p">);</span>
-<span class="nv">$app</span><span class="o">-&gt;</span><span class="na">before</span><span class="p">(</span><span class="nv">$callable</span><span class="p">,</span> <span class="nv">$optional_callable</span><span class="p">);</span>
-<span class="nv">$app</span><span class="o">-&gt;</span><span class="na">after</span><span class="p">(</span><span class="nv">$callable</span><span class="p">,</span> <span class="nv">$optional_callable</span><span class="p">);</span>
-<span class="nv">$app</span><span class="o">-&gt;</span><span class="na">handlers</span><span class="p">(</span><span class="nv">$handlers</span><span class="p">,</span> <span class="nv">$replace</span><span class="p">);</span>
-<span class="nv">$app</span><span class="o">-&gt;</span><span class="na">handle</span><span class="p">(</span><span class="nv">$request</span><span class="p">,</span> <span class="nv">$type</span><span class="p">,</span> <span class="nv">$catch</span><span class="p">);</span>
+<div class="highlight highlight-php"><pre><span class="nv">$app</span><span class="o">-&gt;</span><span class="na">run</span><span class="p">(</span><span class="nv">$request</span><span class="p">);</span> <span class="c1">// handle a request or subrequest</span>
+<span class="nv">$app</span><span class="o">-&gt;</span><span class="na">run</span><span class="p">(</span><span class="nv">$method</span><span class="p">,</span> <span class="nv">$path</span><span class="p">);</span> <span class="c1">// handle a HTTP method for a request path</span>
+<span class="nv">$app</span><span class="o">-&gt;</span><span class="na">handler</span><span class="p">(</span><span class="nv">$callable</span><span class="p">,</span> <span class="nv">$condition</span><span class="p">);</span> <span class="c1">// wrap a callback as a Handler</span>
+<span class="nv">$app</span><span class="o">-&gt;</span><span class="na">handlers</span><span class="p">();</span> <span class="c1">// get the handler stack</span>
+<span class="nv">$app</span><span class="o">-&gt;</span><span class="na">handlers</span><span class="p">(</span><span class="k">array</span> <span class="nv">$handlers</span><span class="p">,</span> <span class="nv">$replace</span><span class="p">);</span> <span class="c1">// replace or append to the stack</span>
+<span class="nv">$app</span><span class="o">-&gt;</span><span class="na">before</span><span class="p">(</span><span class="nv">$callable</span><span class="p">,</span> <span class="nv">$condition</span><span class="p">);</span> <span class="c1">// prepend a handler to the stack</span>
+<span class="nv">$app</span><span class="o">-&gt;</span><span class="na">after</span><span class="p">(</span><span class="nv">$callable</span><span class="p">,</span> <span class="nv">$condition</span><span class="p">);</span> <span class="c1">// append a handler to the stack</span>
+<span class="nv">$app</span><span class="o">-&gt;</span><span class="na">route</span><span class="p">(</span><span class="nv">$path</span><span class="p">,</span> <span class="o">...</span><span class="nv">$handlers</span><span class="p">);</span> <span class="c1">// start a new route segment</span>
+<span class="nv">$app</span><span class="o">-&gt;</span><span class="na">handle</span><span class="p">(</span><span class="nv">$request</span><span class="p">,</span> <span class="nv">$type</span><span class="p">,</span> <span class="nv">$catch</span><span class="p">);</span> <span class="c1">// implement HttpKernelInterface::handle</span>
+</pre></div>
+
+<h3>
+<a name="handler" class="anchor" href="#handler"><span class="octicon octicon-link"></span></a>Handler</h3>
+
+<div class="highlight highlight-php"><pre><span class="nv">$handler</span><span class="o">-&gt;</span><span class="na">run</span><span class="p">();</span> <span class="c1">// iterate through the handler stack</span>
+<span class="nv">$handler</span><span class="o">-&gt;</span><span class="na">handler</span><span class="p">(</span><span class="nv">$callable</span><span class="p">,</span> <span class="nv">$condition</span><span class="p">);</span> <span class="c1">// wrap a callback as a Handler</span>
+<span class="nv">$handler</span><span class="o">-&gt;</span><span class="na">handlers</span><span class="p">();</span> <span class="c1">// get the handler stack</span>
+<span class="nv">$handler</span><span class="o">-&gt;</span><span class="na">handlers</span><span class="p">(</span><span class="k">array</span> <span class="nv">$handlers</span><span class="p">,</span> <span class="nv">$replace</span><span class="p">);</span> <span class="c1">// replace or append to the stack</span>
+<span class="nv">$handler</span><span class="o">-&gt;</span><span class="na">context</span><span class="p">(</span><span class="nv">$context</span><span class="p">);</span> <span class="c1">// set the HTTP context</span>
+<span class="nv">$handler</span><span class="o">-&gt;</span><span class="na">context</span><span class="p">();</span> <span class="c1">// get the HTTP context</span>
+<span class="nv">$handler</span><span class="o">-&gt;</span><span class="na">before</span><span class="p">(</span><span class="nv">$callable</span><span class="p">,</span> <span class="nv">$condition</span><span class="p">);</span> <span class="c1">// prepend a handler to the stack</span>
+<span class="nv">$handler</span><span class="o">-&gt;</span><span class="na">after</span><span class="p">(</span><span class="nv">$callable</span><span class="p">,</span> <span class="nv">$condition</span><span class="p">);</span> <span class="c1">// append a handler to the stack</span>
+<span class="nv">$handler</span><span class="o">-&gt;</span><span class="na">options</span><span class="p">(</span><span class="k">array</span> <span class="nv">$options</span><span class="p">);</span> <span class="c1">// set the handler options</span>
+<span class="nv">$handler</span><span class="o">-&gt;</span><span class="na">options</span><span class="p">();</span> <span class="c1">// get the handler options</span>
 </pre></div>
 
 <h3>
 <a name="route" class="anchor" href="#route"><span class="octicon octicon-link"></span></a>Route</h3>
 
-<div class="highlight highlight-php"><pre><span class="nv">$route</span><span class="o">-&gt;</span><span class="na">route</span><span class="p">(</span><span class="nv">$path</span><span class="p">,</span> <span class="o">...</span><span class="nv">$handlers</span><span class="p">);</span>
-<span class="nv">$route</span><span class="o">-&gt;</span><span class="na">path</span><span class="p">();</span>
-<span class="nv">$route</span><span class="o">-&gt;</span><span class="na">method</span><span class="p">(</span><span class="nv">$methods</span><span class="p">,</span> <span class="o">...</span><span class="nv">$handlers</span><span class="p">);</span>
-<span class="nv">$route</span><span class="o">-&gt;</span><span class="na">get</span><span class="p">(</span><span class="o">...</span><span class="nv">$handlers</span><span class="p">);</span>
-<span class="nv">$route</span><span class="o">-&gt;</span><span class="na">post</span><span class="p">(</span><span class="o">...</span><span class="nv">$handlers</span><span class="p">);</span>
-<span class="nv">$route</span><span class="o">-&gt;</span><span class="na">put</span><span class="p">(</span><span class="o">...</span><span class="nv">$handlers</span><span class="p">);</span>
-<span class="nv">$route</span><span class="o">-&gt;</span><span class="na">delete</span><span class="p">(</span><span class="o">...</span><span class="nv">$handlers</span><span class="p">);</span>
-<span class="nv">$route</span><span class="o">-&gt;</span><span class="na">patch</span><span class="p">(</span><span class="o">...</span><span class="nv">$handlers</span><span class="p">);</span>
-<span class="nv">$route</span><span class="o">-&gt;</span><span class="na">options</span><span class="p">(</span><span class="o">...</span><span class="nv">$handlers</span><span class="p">);</span>
-<span class="nv">$route</span><span class="o">-&gt;</span><span class="na">head</span><span class="p">(</span><span class="o">...</span><span class="nv">$handlers</span><span class="p">);</span>
-<span class="nv">$route</span><span class="o">-&gt;</span><span class="na">dump</span><span class="p">();</span>
+<div class="highlight highlight-php"><pre><span class="nv">$route</span><span class="o">-&gt;</span><span class="na">route</span><span class="p">(</span><span class="nv">$path</span><span class="p">,</span> <span class="o">...</span><span class="nv">$handlers</span><span class="p">);</span> <span class="c1">// append a new route segment</span>
+<span class="nv">$route</span><span class="o">-&gt;</span><span class="na">method</span><span class="p">(</span><span class="nv">$methods</span><span class="p">,</span> <span class="o">...</span><span class="nv">$handlers</span><span class="p">);</span> <span class="c1">// register method handler(s)</span>
+<span class="nv">$route</span><span class="o">-&gt;</span><span class="na">get</span><span class="p">(</span><span class="o">...</span><span class="nv">$handlers</span><span class="p">);</span> <span class="c1">// register method handler(s) for GET</span>
+<span class="nv">$route</span><span class="o">-&gt;</span><span class="na">post</span><span class="p">(</span><span class="o">...</span><span class="nv">$handlers</span><span class="p">);</span> <span class="c1">// register method handler(s) for POST</span>
+<span class="nv">$route</span><span class="o">-&gt;</span><span class="na">put</span><span class="p">(</span><span class="o">...</span><span class="nv">$handlers</span><span class="p">);</span> <span class="c1">// register method handler(s) for PUT</span>
+<span class="nv">$route</span><span class="o">-&gt;</span><span class="na">delete</span><span class="p">(</span><span class="o">...</span><span class="nv">$handlers</span><span class="p">);</span> <span class="c1">// register method handler(s) for DELETE</span>
+<span class="nv">$route</span><span class="o">-&gt;</span><span class="na">patch</span><span class="p">(</span><span class="o">...</span><span class="nv">$handlers</span><span class="p">);</span> <span class="c1">// register method handler(s) for PATCH</span>
+<span class="nv">$route</span><span class="o">-&gt;</span><span class="na">options</span><span class="p">(</span><span class="o">...</span><span class="nv">$handlers</span><span class="p">);</span> <span class="c1">// register method handler(s) for OPTIONS</span>
+<span class="nv">$route</span><span class="o">-&gt;</span><span class="na">head</span><span class="p">(</span><span class="o">...</span><span class="nv">$handlers</span><span class="p">);</span> <span class="c1">// register method handler(s) for HEAD</span>
+<span class="nv">$route</span><span class="o">-&gt;</span><span class="na">dump</span><span class="p">();</span> <span class="c1">// recursively dump all routes to an array</span>
 </pre></div>
 
 <h3>
 <a name="context-1" class="anchor" href="#context-1"><span class="octicon octicon-link"></span></a>Context</h3>
 
-<div class="highlight highlight-php"><pre><span class="nv">$context</span><span class="o">-&gt;</span><span class="na">request</span><span class="p">();</span>
-<span class="nv">$context</span><span class="o">-&gt;</span><span class="na">request</span><span class="p">(</span><span class="nv">$request</span><span class="p">);</span>
-<span class="nv">$context</span><span class="o">-&gt;</span><span class="na">response</span><span class="p">();</span>
-<span class="nv">$context</span><span class="o">-&gt;</span><span class="na">response</span><span class="p">(</span><span class="nv">$response</span><span class="p">);</span>
-<span class="nv">$context</span><span class="o">-&gt;</span><span class="na">response</span><span class="p">(</span><span class="nv">$content</span><span class="p">,</span> <span class="nv">$status</span><span class="p">,</span> <span class="nv">$headers</span><span class="p">);</span>
-<span class="nv">$context</span><span class="o">-&gt;</span><span class="na">error</span><span class="p">(</span><span class="nv">$exception</span><span class="p">);</span>
-<span class="nv">$context</span><span class="o">-&gt;</span><span class="na">error</span><span class="p">(</span><span class="nv">$message</span><span class="p">,</span> <span class="nv">$status</span><span class="p">,</span> <span class="nv">$headers</span><span class="p">,</span> <span class="nv">$code</span><span class="p">);</span>
-<span class="nv">$context</span><span class="o">-&gt;</span><span class="na">master</span><span class="p">();</span>
-<span class="nv">$context</span><span class="o">-&gt;</span><span class="na">map</span><span class="p">(</span><span class="nv">$params</span><span class="p">);</span>
-<span class="nv">$context</span><span class="o">-&gt;</span><span class="na">param</span><span class="p">(</span><span class="nv">$key</span><span class="p">);</span>
-<span class="nv">$context</span><span class="o">-&gt;</span><span class="na">param</span><span class="p">(</span><span class="nv">$key</span><span class="p">,</span> <span class="nv">$default</span><span class="p">);</span>
-<span class="nv">$context</span><span class="o">-&gt;</span><span class="na">append</span><span class="p">(</span><span class="nv">$output</span><span class="p">);</span>
-<span class="nv">$context</span><span class="o">-&gt;</span><span class="na">last</span><span class="p">();</span>
+<div class="highlight highlight-php"><pre><span class="nv">$context</span><span class="o">-&gt;</span><span class="na">request</span><span class="p">();</span> <span class="c1">// get the Request</span>
+<span class="nv">$context</span><span class="o">-&gt;</span><span class="na">request</span><span class="p">(</span><span class="nv">$request</span><span class="p">,</span> <span class="nv">$type</span><span class="p">);</span> <span class="c1">// set the Request</span>
+<span class="nv">$context</span><span class="o">-&gt;</span><span class="na">response</span><span class="p">();</span> <span class="c1">// get the Response</span>
+<span class="nv">$context</span><span class="o">-&gt;</span><span class="na">response</span><span class="p">(</span><span class="nv">$response</span><span class="p">);</span> <span class="c1">// set the Response</span>
+<span class="nv">$context</span><span class="o">-&gt;</span><span class="na">response</span><span class="p">(</span><span class="nv">$content</span><span class="p">,</span> <span class="nv">$status</span><span class="p">,</span> <span class="k">array</span> <span class="nv">$headers</span><span class="p">);</span> <span class="c1">// create a new Response</span>
+<span class="nv">$context</span><span class="o">-&gt;</span><span class="na">error</span><span class="p">(</span><span class="nv">$exception</span><span class="p">);</span> <span class="c1">// throw an exception</span>
+<span class="nv">$context</span><span class="o">-&gt;</span><span class="na">error</span><span class="p">(</span><span class="nv">$message</span><span class="p">,</span> <span class="nv">$status</span><span class="p">,</span> <span class="k">array</span> <span class="nv">$headers</span><span class="p">,</span> <span class="nv">$code</span><span class="p">);</span> <span class="c1">// throw an exception</span>
+<span class="nv">$context</span><span class="o">-&gt;</span><span class="na">master</span><span class="p">();</span> <span class="c1">// check whether the current request is the master request</span>
+<span class="nv">$context</span><span class="o">-&gt;</span><span class="na">params</span><span class="p">(</span><span class="nv">$key</span><span class="p">);</span> <span class="c1">// get a route parameter</span>
+<span class="nv">$context</span><span class="o">-&gt;</span><span class="na">params</span><span class="p">(</span><span class="nv">$key</span><span class="p">,</span> <span class="nv">$default</span><span class="p">);</span> <span class="c1">// get a route parameter with fallback</span>
+<span class="nv">$context</span><span class="o">-&gt;</span><span class="na">params</span><span class="p">(</span><span class="k">array</span> <span class="nv">$params</span><span class="p">);</span> <span class="c1">// insert route parameters</span>
+<span class="nv">$context</span><span class="o">-&gt;</span><span class="na">params</span><span class="p">();</span> <span class="c1">// get all route parameters</span>
+<span class="nv">$context</span><span class="o">-&gt;</span><span class="na">append</span><span class="p">(</span><span class="nv">$output</span><span class="p">);</span> <span class="c1">// append a handler return value</span>
+<span class="nv">$context</span><span class="o">-&gt;</span><span class="na">last</span><span class="p">();</span> <span class="c1">// get the last handler return value</span>
+<span class="nv">$context</span><span class="o">-&gt;</span><span class="na">clear</span><span class="p">();</span> <span class="c1">// clear the current context</span>
 </pre></div>
 
 <h2>
@@ -319,6 +395,7 @@
 <li><a href="https://github.com/codegangsta/martini">Martini</a></li>
 <li><a href="https://github.com/vlucas/bulletphp">Bullet</a></li>
 <li><a href="https://github.com/codeguy/Slim">Slim</a></li>
+<li><a href="https://github.com/silexphp/Silex">Silex</a></li>
 </ul>
       </section>
     </div>
