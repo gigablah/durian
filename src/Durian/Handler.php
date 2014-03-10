@@ -240,10 +240,10 @@ class Handler
 
         if (!is_callable($handler)) {
             $result = $handler;
-        } elseif ($handler instanceof \Closure && defined('HHVM_VERSION')) {
+        } elseif ($handler instanceof \Closure && defined('HHVM_VERSION')) { // @codeCoverageIgnoreStart
             // temporary workaround for HHVM until Closure::bind is implemented
-            $result = call_user_func($handler, $this->context); // @codeCoverageIgnore
-        } else { // @codeCoverageIgnore
+            $result = call_user_func($handler, $this->context);
+        } else { // @codeCoverageIgnoreEnd
             if ($handler instanceof \Closure) {
                 $handler = \Closure::bind($handler, $this->context);
             } elseif ($handler instanceof Handler) {
