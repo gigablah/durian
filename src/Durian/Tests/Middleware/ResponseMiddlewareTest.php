@@ -3,7 +3,6 @@
 namespace Durian\Tests\Middleware;
 
 use Durian\Application;
-use Durian\Context;
 use Durian\Middleware\ResponseMiddleware;
 use Symfony\Component\HttpFoundation\Request;
 
@@ -17,9 +16,8 @@ class ResponseMiddlewareTest extends \PHPUnit_Framework_TestCase
     public function testMissingResponse()
     {
         $app = new Application();
-        $app->context(new Context());
         $app->handlers([
-            new ResponseMiddleware(),
+            new ResponseMiddleware($app),
             function () {
                 return 'foo';
             }
@@ -34,9 +32,8 @@ class ResponseMiddlewareTest extends \PHPUnit_Framework_TestCase
     public function testExceptionResponse()
     {
         $app = new Application();
-        $app->context(new Context());
         $app->handlers([
-            new ResponseMiddleware(),
+            new ResponseMiddleware($app),
             function () {
                 throw new \Exception('foo');
             }
@@ -51,9 +48,8 @@ class ResponseMiddlewareTest extends \PHPUnit_Framework_TestCase
     public function testHttpExceptionResponse()
     {
         $app = new Application();
-        $app->context(new Context());
         $app->handlers([
-            new ResponseMiddleware(),
+            new ResponseMiddleware($app),
             function () {
                 $this->error('I\'m a teapot', 418, ['X-Temperature-Celsius' => 50]);
             }
@@ -72,10 +68,9 @@ class ResponseMiddlewareTest extends \PHPUnit_Framework_TestCase
     public function testDebugResponse()
     {
         $app = new Application();
-        $app->context(new Context());
         $app['debug'] = true;
         $app->handlers([
-            new ResponseMiddleware(),
+            new ResponseMiddleware($app),
             function () {
                 throw new \RuntimeException();
             }

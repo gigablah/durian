@@ -3,7 +3,6 @@
 namespace Durian\Tests\Middleware;
 
 use Durian\Application;
-use Durian\Context;
 use Durian\Middleware\RouterMiddleware;
 use Symfony\Component\HttpFoundation\Request;
 
@@ -17,9 +16,8 @@ class RouterMiddlewareTest extends \PHPUnit_Framework_TestCase
     public function testSimpleRoute()
     {
         $app = new Application;
-        $app->context(new Context());
         $app->handlers([
-            new RouterMiddleware()
+            new RouterMiddleware($app)
         ]);
         $app->route('/', function () {
             $this->response('Hello World');
@@ -36,9 +34,8 @@ class RouterMiddlewareTest extends \PHPUnit_Framework_TestCase
     public function testInvalidPath()
     {
         $app = new Application;
-        $app->context(new Context());
         $app->handlers([
-            new RouterMiddleware()
+            new RouterMiddleware($app)
         ]);
         $app->route('/', function () {
             $this->response('Hello World');
@@ -53,9 +50,8 @@ class RouterMiddlewareTest extends \PHPUnit_Framework_TestCase
     public function testInvalidMethod()
     {
         $app = new Application;
-        $app->context(new Context());
         $app->handlers([
-            new RouterMiddleware()
+            new RouterMiddleware($app)
         ]);
         $app->route('/', function () {
             $this->response('Hello World');
@@ -67,12 +63,11 @@ class RouterMiddlewareTest extends \PHPUnit_Framework_TestCase
     public function testSlugParam()
     {
         $app = new Application;
-        $app->context(new Context());
         $app->handlers([
-            new RouterMiddleware()
+            new RouterMiddleware($app)
         ]);
         $app->route('/hello/{name}', function () {
-            $this->response($this->param('name'));
+            $this->response($this->params('name'));
         });
 
         $response = $app->handle(Request::create('/hello/foo'));
@@ -84,12 +79,11 @@ class RouterMiddlewareTest extends \PHPUnit_Framework_TestCase
     public function testIntegerParam()
     {
         $app = new Application;
-        $app->context(new Context());
         $app->handlers([
-            new RouterMiddleware()
+            new RouterMiddleware($app)
         ]);
         $app->route('/blog/{id:[0-9]+}', function () {
-            $this->response($this->param('id'));
+            $this->response($this->params('id'));
         });
 
         $response = $app->handle(Request::create('/blog/12345'));

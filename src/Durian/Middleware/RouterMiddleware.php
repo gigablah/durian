@@ -2,6 +2,8 @@
 
 namespace Durian\Middleware;
 
+use Durian\Application;
+use Durian\Middleware;
 use FastRoute\RouteCollector;
 use FastRoute\RouteParser\Std as RouteParser;
 use FastRoute\DataGenerator\GroupCountBased as DataGenerator;
@@ -14,37 +16,46 @@ use Symfony\Component\HttpKernel\Exception\MethodNotAllowedHttpException;
  *
  * @author Chris Heng <bigblah@gmail.com>
  */
-class RouterMiddleware extends AbstractMiddleware
+class RouterMiddleware extends Middleware
 {
+    /**
+     * Register the route collector and dispatcher.
+     *
+     * @param Application $app The application container
+     */
+    public function __construct(Application $app)
+    {
+        $app['router.collector'] = $app->share(function ($app) {
+            return new RouteCollector(new RouteParser(), new DataGenerator());
+        });
+
+        $app['router.dispatcher'] = $app->share(function ($app) {
+            foreach ($app['app.routes']->dump() as $route => $methods) {
+                foreach ($methods as $method => $handlers) {
+                    $app['router.collector']->addRoute($method, $route, $handlers);
+                }
+            }
+
+            return new Dispatcher($app['router.collector']->getData());
+        });
+
+        parent::__construct($app);
+    }
+
     /**
      * Compile all the routes and match the resulting regex against the current request.
      *
-     * If a match is found, yield each handler associated with the route.
+     * The handlers associated with all matched segments and methods are assembled and executed.
      *
-     * @yields \Durian\Handler Handler associated with the matched route
+     * @return mixed The last handler output
      *
      * @throws NotFoundHttpException if no matching route is found
      * @throws MethodNotAllowedException if no matching method is found for the route
      */
-    public function __invoke()
+    public function run()
     {
-        $collector = new RouteCollector(new RouteParser(), new DataGenerator());
-
-        $dump = [];
-        foreach ($this->app->routes() as $route) {
-            $dump = array_merge_recursive($dump, $route->dump());
-        }
-
-        foreach ($dump as $route => $methods) {
-            foreach ($methods as $method => $handlers) {
-                $collector->addRoute($method, $route, $handlers);
-            }
-        }
-
-        $dispatcher = new Dispatcher($collector->getData());
-
         $request = $this->request();
-        $result = $dispatcher->dispatch($request->getMethod(), $request->getPathInfo());
+        $result = $this->app['router.dispatcher']->dispatch($request->getMethod(), $request->getPathInfo());
 
         switch ($result[0]) {
             case Dispatcher::NOT_FOUND:
@@ -55,11 +66,11 @@ class RouterMiddleware extends AbstractMiddleware
                 throw new MethodNotAllowedHttpException($methods);
                 break;
             case Dispatcher::FOUND:
-                $this->app->context()->params($result[2]);
-                foreach ($result[1] as $handler) {
-                    yield $this->app->handler($handler);
-                }
+                $this->context->params($result[2]);
+                $this->handlers = $result[1];
                 break;
         }
+
+        return parent::run();
     }
 }

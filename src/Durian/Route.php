@@ -19,12 +19,13 @@ class Route
      *
      * @param string $path     Path or pattern to match
      * @param array  $handlers Array of handlers to execute for the path segment
+     * @param array  $methods  Array of default methods to respond to
      */
-    public function __construct($path = '/', array $handlers = [])
+    public function __construct($path = null, array $handlers = [], array $methods = [])
     {
         $this->path = $path;
         $this->handlers = $handlers;
-        $this->methods = ['GET' => []];
+        $this->methods = array_fill_keys($methods, []);
         $this->children = [];
     }
 
@@ -35,14 +36,16 @@ class Route
      */
     public function dump()
     {
-        $routes = [$this->path => []];
+        $routes = [];
 
-        foreach ($this->methods as $method => $methodHandlers) {
-            $routes[$this->path][$method] = array_merge($this->handlers, $methodHandlers);
+        if (null !== $this->path) {
+            foreach ($this->methods as $method => $methodHandlers) {
+                $routes[$this->path][$method] = array_merge($this->handlers, $methodHandlers);
+            }
         }
 
-        foreach ($this->children as $child) {
-            foreach ($child->dump() as $path => $methods) {
+        foreach ($this->children as $route) {
+            foreach ($route->dump() as $path => $methods) {
                 foreach ($methods as $method => $methodHandlers) {
                     $routes[$path][$method] = array_merge($this->handlers, $methodHandlers);
                 }
@@ -62,15 +65,11 @@ class Route
      */
     public function route($path, $handlers = null)
     {
-        if (null === $handlers) {
-            $handlers = [];
-        } else {
-            $handlers = func_get_args();
-            array_shift($handlers);
-        }
+        $handlers = func_get_args();
+        array_shift($handlers);
 
         $path = sprintf('%s%s', rtrim($this->path, '/'), $path);
-        $this->children[] = $route = new static($path, $handlers);
+        $this->children[] = $route = new static($path, $handlers, ['GET']);
 
         return $route;
     }

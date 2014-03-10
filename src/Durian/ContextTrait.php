@@ -3,39 +3,27 @@
 namespace Durian;
 
 use Symfony\Component\HttpKernel\HttpKernelInterface;
-use Symfony\Component\HttpKernel\Exception\HttpException;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
- * A HTTP context.
+ * Context proxy methods.
  *
  * @author Chris Heng <bigblah@gmail.com>
  */
-class Context
+trait ContextTrait
 {
-    private $params = [];
-    private $output = [];
-    private $type;
-    private $request;
-    private $response;
-
     /**
      * Set or get the request for the current context.
      *
      * @param Request $request The request object
      * @param integer $type    Request type (master or subrequest)
      *
-     * @return Request The current request if no arguments passed
+     * @return Request The current request
      */
     public function request(Request $request = null, $type = HttpKernelInterface::MASTER_REQUEST)
     {
-        if (null === $request) {
-            return $this->request;
-        }
-
-        $this->request = $request;
-        $this->type = $type;
+        return $this->context->request($request, $type);
     }
 
     /**
@@ -45,19 +33,11 @@ class Context
      * @param integer         $status   HTTP status code
      * @param array           $headers  Response headers to set
      *
-     * @return Response The current response if no arguments passed
+     * @return Response The current response
      */
     public function response($response = null, $status = 200, array $headers = [])
     {
-        if (null === $response) {
-            return $this->response;
-        }
-
-        if (!$response instanceof Response) {
-            $response = Response::create($response, $status, $headers);
-        }
-
-        $this->response = $response;
+        return $this->context->response($response, $status, $headers);
     }
 
     /**
@@ -72,16 +52,8 @@ class Context
      */
     public function error($exception = '', $status = 500, array $headers = [], $code = 0)
     {
-        if ($exception instanceof \Exception) {
-            $message = $exception->getMessage();
-            $code = $code ?: $exception->getCode();
-        } else {
-            $message = $exception;
-            $exception = null;
-        }
-
-        throw new HttpException($status, $message, $exception, $headers, $code);
-    }
+        $this->context->error($exception, $status, $headers, $code);
+    } // @codeCoverageIgnore
 
     /**
      * Check whether the current request is a master or subrequest.
@@ -90,7 +62,7 @@ class Context
      */
     public function master()
     {
-        return HttpKernelInterface::MASTER_REQUEST === $this->type;
+        return $this->context->master();
     }
 
     /**
@@ -103,15 +75,7 @@ class Context
      */
     public function params($param = null, $default = null)
     {
-        if (null === $param) {
-            return $this->params;
-        }
-
-        if (is_array($param)) {
-            $this->params = $param + $this->params;
-        } else {
-            return array_key_exists($param, $this->params) ? $this->params[$param] : $default;
-        }
+        return $this->context->params($param, $default);
     }
 
     /**
@@ -123,13 +87,11 @@ class Context
      */
     public function last($output = null)
     {
-        if (func_num_args()) {
-            $this->output[] = $output;
-        } elseif (count($this->output)) {
-            return end($this->output);
+        if (!func_num_args()) {
+            return $this->context->last();
         }
 
-        return null;
+        $this->context->last($output);
     }
 
     /**
@@ -137,10 +99,6 @@ class Context
      */
     public function clear()
     {
-        $this->params = [];
-        $this->output = [];
-        $this->type = null;
-        $this->request = null;
-        $this->response = null;
+        $this->context->clear();
     }
 }
